@@ -17,21 +17,21 @@ This report presents an empirical evaluation of the **Prediction-Informed Select
 
 1. **RQ1 (Predictability of Promised Delivery Lateness Proxy)**:
    - Evaluated on **2,038 drop-off delivery stops** (2,051 total stops including depots) across 12 calendar dates from **7 station codes** (`DBO2`, `DCH4`, `DLA7`, `DLA8`, `DLA9`, `DSE4`, `DSE5`).
-   - *Label Definition*: The public Amazon Challenge dataset does not provide observed customer-level delivery completion timestamps. Consequently, ground-truth delivery lateness is constructed as a **route-propagated time-window violation proxy** computed by propagating the driver's actual sequence through the official historical average travel-time matrix and planned service durations. Base lateness prevalence is 50.34%.
-   - *Model Selection on Validation Split*: Based strictly on **validation set criteria** (chronological split), **Logistic Regression** is the superior model, achieving a validation Brier score of **0.2387** (vs. 0.2461 for Random Forest), validation log loss of **0.6640** (vs. 0.6848), validation ECE of **0.0159** (vs. 0.1293), and validation ROC-AUC of **0.5327** (vs. 0.4920). Consequently, calibrated probabilities from Logistic Regression were selected to populate $p_i$ in the routing benchmark. On the held-out test cohort, Logistic Regression achieves ROC-AUC = 0.595, PR-AUC = 0.596, and Brier score = 0.2404.
+   - *Label Definition*: The public Amazon Challenge dataset does not provide observed customer-level delivery completion timestamps. Consequently, ground-truth delivery lateness is strictly defined as a **route-propagated promised-time violation proxy** computed by propagating the driver's actual sequence through the official historical average travel-time matrix and planned service durations. Base lateness prevalence is 50.34%.
+   - *Model Selection on Validation Split*: Based strictly on **validation set criteria** (chronological split), **Logistic Regression** is the superior model, achieving a validation Brier score of **0.2387** (vs. 0.2461 for Random Forest and 0.2505 for Prevalence Baseline), validation log loss of **0.6640** (vs. 0.6848), validation ECE of **0.0159** (vs. 0.1293), and validation ROC-AUC of **0.5327** (vs. 0.4920). Consequently, calibrated probabilities from Logistic Regression were selected to populate $p_i$ in the routing benchmark. On the held-out test cohort, Logistic Regression achieves ROC-AUC = 0.595, PR-AUC = 0.596, and Brier score = 0.2404.
 2. **RQ2 (Routing Effectiveness & Policy Comparison)**:
-   - Evaluated across **288 factorial runs** on 3 held-out test routes (`DBO2`, `DSE4`, and `DSE5`) spanning budgets $B \in \{5\%, 10\%, 20\%, 30\%\}$ and distance tolerances $\delta \in \{0\%, 2\%, 5\%, 10\%\}$. The Random baseline is evaluated across 10 distinct random seeds (seeds 42 to 51) per parameter cell.
+   - Evaluated across **288 factorial runs** on 3 held-out test routes (`DBO2`, `DSE4`, and `DSE5`) spanning budgets $B \in \{5\%, 10\%, 20\%, 30\%\}$ and distance tolerances $\delta \in \{0\%, 2\%, 5\%, 10\%\}$. All distance metrics $\Delta D$ represent a Haversine straight-line distance proxy. The Random baseline is evaluated across 10 distinct random seeds (seeds 42 to 51) per parameter cell.
    - **Proposition 1 Monotonicity**: Verified in 100% of runs ($\min \Delta TT \geq 0.0000$ min, exactly 0 violations). Resequencing never degraded route performance.
    - **Hard Feasibility**: 100% of final routes passed the independent validator (no subtours, no duplicated/dropped customers, depot departure preserved).
 3. **Core Hypothesis Resolution & Defensible Statistical Verdict**:
-   - **Defensible Conclusion**: RA shows large operational improvements over risk-only and conventional targeting (averaging >1,000 minutes of saved tardiness), but none of the route-clustered comparisons remain statistically significant after Holm–Bonferroni correction because only three independent test routes are available ($N=3$).
+   - **Defensible Conclusion**: Actionability dominance ($g_i = \max \Delta TT$) drives simulated tardiness reductions; pure risk without actionability ($RB$) fails. Current evidence does not show that multiplying actionability by predicted risk ($RA$) improves outcomes over actionability alone ($AB$). None of the route-clustered comparisons remain statistically significant after Holm–Bonferroni correction because only three independent test routes are available ($N=3$).
    - **Route-Clustered Statistical Inference ($N=3$)**:
      - **RA vs. RB (Pure Risk)**: Mean diff = **+1,050.28 min**, route-level 95% bootstrap CI = **[+830.29, +1,239.51] min**, unadjusted $p = 0.0126$, Holm-Bonferroni adjusted $p = 0.0631$. Pure risk targeting selects stops that are geographically inaccessible, squandering limited relocation capacity.
      - **RA vs. Slack**: Mean diff = **+1,014.41 min**, route-level 95% bootstrap CI = **[+394.52, +1,475.30] min**, unadjusted $p = 0.0877$, Holm-Bonferroni adjusted $p = 0.1754$.
      - **RA vs. Deadline**: Mean diff = **+1,145.87 min**, route-level 95% bootstrap CI = **[+834.88, +1,414.37] min**, unadjusted $p = 0.0210$, Holm-Bonferroni adjusted $p = 0.0839$.
      - **RA vs. Random**: Mean diff = **+1,118.42 min**, route-level 95% bootstrap CI = **[+759.68, +1,299.85] min**, unadjusted $p = 0.0248$, Holm-Bonferroni adjusted $p = 0.0839$.
      - **RA vs. AB (Pure Actionability)**: Mean diff = **-16.62 min**, route-level 95% bootstrap CI = **[-55.48, +3.95] min**, unadjusted $p = 0.4825$, Holm-Bonferroni adjusted $p = 0.4825$.
-   - **Sample Size & Prospective Power**: Establishing formal statistical confirmation under route clustering requires expanding the held-out route sample based on a formal prospective power analysis.
+   - **Sample Size & Prospective Power**: Establishing formal statistical confirmation under route clustering requires expanding the held-out route sample based on a formal prospective power analysis ($N \approx 34$ for RA vs AB, $N \approx 5$ for RA vs RB).
    - **Scientific Insight**: Actionability score $g_i$ captures virtually all single-vehicle schedule headroom. Weighting by predicted risk ($p_i \cdot g_i$) provides a sensible tie-breaker without degrading performance, but does not yield a statistically significant advantage over pure $g_i$ alone in this single-vehicle setting.
 
 ---
@@ -40,21 +40,22 @@ This report presents an empirical evaluation of the **Prediction-Informed Select
 
 ### Experimental Setup
 - **Dataset**: Official Amazon Challenge cohort (`code/data/raw/`): 13 routes, 2,051 total stops (2,038 drop-off stops), 3,129 packages across 12 calendar dates from 7 distribution centers (`DBO2`, `DCH4`, `DLA7`, `DLA8`, `DLA9`, `DSE4`, `DSE5`).
-- **Target Label Proxy**: Route-propagated time-window violation indicator derived from actual driver sequence and historical average travel times.
+- **Target Label Proxy**: Route-propagated promised-time violation proxy derived from actual driver sequence and historical average travel times.
 - **Leakage Guard**: Enforced before model fitting. Only ex-ante features available at vehicle departure time $t \le \text{departure\_time}$ were utilized:
-  - Geographic: distance to depot, 2 km local stop density.
+  - Geographic: distance to depot (Haversine proxy), 2 km local stop density.
   - Operational: planned service seconds, package volume ($\text{cm}^3$), package count at stop.
   - Route context: total route stops, total planned route service minutes, departure hour, day of week.
   - Deadline slack: time until promised delivery deadline ($\tau_i - \text{departure\_time}$).
 - **Chronological Split**:
-  - **Train**: 1,223 stops across earliest 6 dates (60%).
-  - **Validation (Model Selection & Calibration)**: 408 stops across next 3 dates (20%).
-  - **Test (Held-out Evaluation)**: 407 stops across latest 3 dates (20%).
+  - **Train**: 1,173 stops across earliest 7 dates (60%).
+  - **Validation (Model Selection & Calibration)**: 331 stops across next 2 dates (20%).
+  - **Test (Held-out Evaluation)**: 534 stops across latest 3 dates (20%).
 
 ### Model Selection on Validation Split
 
 | Model | Validation ROC-AUC | Validation PR-AUC | Validation Brier Score | Validation Log Loss | Validation ECE |
 |---|---:|---:|---:|---:|---:|
+| **Prevalence Baseline** | 0.500 | 0.511 | 0.2505 | 0.6942 | 0.0255 |
 | **Logistic Regression (Selected)** | **0.533** | 0.515 | **0.2387** | **0.6640** | **0.0159** |
 | **Random Forest** | 0.492 | **0.538** | 0.2461 | 0.6848 | 0.1293 |
 
@@ -64,6 +65,7 @@ This report presents an empirical evaluation of the **Prediction-Informed Select
 
 | Model | Test ROC-AUC | Test PR-AUC | Test Brier Score | Test Log Loss | Test ECE |
 |---|---:|---:|---:|---:|---:|
+| **Prevalence Baseline** | 0.500 | 0.539 | 0.2514 | 0.6959 | 0.0542 |
 | **Logistic Regression** | **0.595** | 0.596 | **0.2404** | **0.6704** | **0.0095** |
 | **Random Forest** | 0.547 | **0.610** | 0.2445 | 0.6819 | 0.0203 |
 

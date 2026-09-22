@@ -101,22 +101,32 @@ code/tests/test_schedule_and_invariants.py::test_slack_vs_deadline_ranking_diver
 
 ---
 
-## 5. Roadmap to Full Scientific Evidence
+## 5. Roadmap to Full Scientific Evidence: Status & Milestones
 
-To elevate this codebase from software verification to rigorous peer-reviewed scientific evidence, the following four milestones are currently in progress:
+The empirical infrastructure has progressed significantly from preliminary synthetic fixtures to the official Amazon dataset:
 
-1. **Official Amazon Last Mile Adapter**: Full parser for the nested official schema (`routes.json`, `package_data.json`, `travel_times.json`, `actual_sequences.json`), with multi-package stop aggregation and UTC time-window handling.
-2. **RQ1 Chronological ML Prediction Pipeline**: Chronological 60/20/20 date split, ex-ante features under strict leakage guard ($t \le \text{decision\_time}$), and probability calibration (Platt/isotonic) optimizing Brier score.
-3. **RQ2 Held-Out Routing Evaluation**: Execution of PISR across a large cohort of held-out real routes with multiple random seeds, Clarke-Wright baseline comparisons, and return-to-depot sensitivity checks.
-4. **Statistical Hypothesis Testing**: Paired Wilcoxon signed-rank and paired t-tests, 95% bootstrap confidence intervals for $\Delta TT$ and $\Delta NL$, establishing whether RA achieves statistically significant superiority over AB and RB.
+### Completed Milestones:
+1. **Official Amazon Last Mile Adapter (Strict Mode)**: Fully integrated parser for official schemas (`route_data.json`, `package_data.json`, `travel_times.json`, `actual_sequences.json`). Runs with strict mode validation: fails explicitly on missing/corrupt files, audits actual sequences without silent fallback, disables arbitrary imputation, and reports 0 imputed edges on official matrices.
+2. **RQ1 Chronological ML Prediction Pipeline**: Chronological 60/20/20 split across dispatch dates, strict leakage guard preventing post-departure leakage, prevalence-only baseline, and validation calibration model selection. Logistic Regression achieved superior calibration over Random Forest (Validation Brier: 0.2387 vs 0.2461, ECE: 0.0159 vs 0.1293) and was formally selected. Ground truth targets are strictly defined as the *route-propagated promised-time violation proxy*.
+3. **RQ2 Held-Out Empirical Routing Benchmark**: Evaluated 288 factorial runs ($3 \text{ routes} \times 4 \text{ budgets} \times 4 \text{ tolerances} \times 6 \text{ policies}$) with 10 random seeds per cell, Clarke-Wright baseline comparisons, individual seed exports (`random_seed_runs.csv`), and runtime profiling with $O(1)$ distance delta pruning.
+4. **Route-Clustered Statistical Inference**: Implemented cluster-robust standard errors and Holm–Bonferroni corrections to prevent cell-level pseudo-replication across repeated evaluation cells.
+
+### Next Empirical Milestones & Prospective Power Analysis:
+1. **Prospective Power Analysis**:
+   - The current held-out cohort of $N=3$ independent routes correctly demonstrates actionability dominance ($g_i = \max \Delta TT$), where actionability alone ($AB$: +12.2% reduction, +1,434.5 min) and risk-actionability ($RA$: +12.1% reduction, +1,417.9 min) vastly outperform pure risk ($RB$: +2.9% reduction, +367.6 min) and Random (+2.5% reduction).
+   - Because $N=3$ yields only 2 degrees of freedom, Holm-adjusted tests for RA vs AB ($p=0.4825$) and RA vs RB ($p=0.0631$) remain underpowered.
+   - Based on observed variance, detecting the medium effect between RA and AB ($d \approx 0.49$) at $\alpha=0.05$ with $80\%$ statistical power requires $N \approx 34$ independent routes; detecting the massive effect of RA over RB ($d \approx 5.09$) requires $N \approx 5$ independent routes.
+2. **Expansion to Full Official Evaluation Cohort**: Scale the evaluation grid to $N \ge 35$ independent routes from the 3,072 evaluation routes released in the Amazon challenge dataset.
+3. **Station and Date Robustness**: Evaluate policy stability across heterogeneous delivery stations (urban vs suburban) and weather/traffic conditions.
 
 ---
 
 ## 6. Honest Recommendation for Your Advisor / Teacher
 
 > **What to tell your teacher:**
-> "The core algorithmic kernel of PISR (Algorithm 1) and Proposition 1 are mathematically correct and verified in code. Resequencing with schedule propagation successfully prevents downstream disruptions and enforces distance limits.
+> "The core algorithmic kernel of PISR (Algorithm 1) and Proposition 1 are mathematically verified, computationally workable, and fully tested on official Amazon Last Mile Challenge data.
 > 
-> However, our initial 180 simulation runs were on synthetic fixtures with heuristic probabilities, where RA and AB yielded identical results. Therefore, **we do not yet have scientific proof that RA outperforms AB, nor is the work ready for publication submission**.
+> The most defensible current scientific conclusion is:
+> **PISR is computationally workable, and actionability-based targeting produces large simulated tardiness reductions. Current evidence demonstrates actionability dominance: actionability alone ($g_i$) drives operational value, while pure risk without actionability ($RB$) fails. Multiplying actionability by predicted risk ($RA$) does not outperform actionability alone ($AB$).**
 > 
-> We are actively implementing the official challenge adapter, training a genuine calibrated ML model on chronological splits, and testing on held-out routes to establish empirical validity."
+> We have completed the official adapter in strict mode, validated model selection on chronological splits (Logistic Regression selected via validation Brier/ECE), and replaced cell-level pseudo-replication with route-clustered statistics. Before finalizing `main.tex`, we will scale the evaluation using a prospective power analysis ($N \approx 34$ routes) across the broader Amazon challenge dataset."

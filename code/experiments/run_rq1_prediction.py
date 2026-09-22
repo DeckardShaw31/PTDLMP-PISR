@@ -18,7 +18,7 @@ def run_rq1_experiment(
     output_dir: str
 ) -> Tuple[RiskPredictionPipeline, Dict[str, Any], pd.DataFrame]:
     print(f"[RQ1] Loading Amazon dataset from '{data_dir}'...")
-    instances = load_official_amazon_dataset(data_dir)
+    instances = load_official_amazon_dataset(data_dir, strict_mode=True, default_sla_hours=4.0)
     print(f"[RQ1] Successfully loaded {len(instances)} routes.")
 
     # 1. Build dataset rows across all routes
@@ -57,28 +57,67 @@ def run_rq1_experiment(
 
     # 4. Compare Models: Prevalence Baseline, Logistic Regression, Random Forest
     results = {}
-    
+    from src.prediction.evaluate import evaluate_predictions
+
+    # Prevalence Baseline (predicts constant training prevalence)
+    train_prev = float(df_train["label"].mean())
+    val_prev_probs = np.full(len(df_val), train_prev)
+    test_prev_probs = np.full(len(df_test), train_prev)
+    val_prev_metrics = evaluate_predictions(df_val["label"].values, val_prev_probs)
+    test_prev_metrics = evaluate_predictions(df_test["label"].values, test_prev_probs)
+    results["PrevalenceBaseline"] = {
+        **test_prev_metrics,
+        "test": test_prev_metrics,
+        "validation": val_prev_metrics
+    }
+
     # Logistic Regression
-    pipe_lr, metrics_lr, _ = train_and_evaluate_pipeline(dataset, feature_cols, model_type="logistic")
+    pipe_lr, metrics_lr, test_preds_lr = train_and_evaluate_pipeline(dataset, feature_cols, model_type="logistic")
     results["LogisticRegression"] = metrics_lr
 
     # Random Forest
-    pipe_rf, metrics_rf, test_preds = train_and_evaluate_pipeline(dataset, feature_cols, model_type="rf")
+    pipe_rf, metrics_rf, test_preds_rf = train_and_evaluate_pipeline(dataset, feature_cols, model_type="rf")
     results["RandomForest"] = metrics_rf
 
-    print("\n" + "=" * 60)
+    print("\n" + "=" * 70)
+    print("RQ1 VALIDATION MODEL SELECTION COMPARISON (CHRONOLOGICAL SPLIT)")
+    print("=" * 70)
+    val_headers = ["Model", "Val ROC-AUC", "Val PR-AUC", "Val Brier Score", "Val Log Loss", "Val ECE"]
+    val_rows = []
+    for m_name, m_dict in results.items():
+        v = m_dict["validation"]
+        val_rows.append([
+            m_name,
+            f"{v['roc_auc']:.3f}",
+            f"{v['pr_auc']:.3f}",
+            f"{v['brier_score']:.4f}",
+            f"{v['log_loss']:.4f}",
+            f"{v['ece']:.4f}"
+        ])
+    print(format_markdown_table(val_headers, val_rows))
+
+    # Model Selection Rule: select model with lowest validation Brier score
+    brier_lr = metrics_lr["validation"]["brier_score"]
+    brier_rf = metrics_rf["validation"]["brier_score"]
+    selected_name = "LogisticRegression" if brier_lr <= brier_rf else "RandomForest"
+    selected_pipe = pipe_lr if selected_name == "LogisticRegression" else pipe_rf
+    selected_preds = test_preds_lr if selected_name == "LogisticRegression" else test_preds_rf
+    print(f"\n[RQ1] Model Selection Decision: '{selected_name}' selected based on validation Brier ({min(brier_lr, brier_rf):.4f}).")
+
+    print("\n" + "=" * 70)
     print("RQ1 PREDICTION EVALUATION RESULTS (OUT-OF-SAMPLE TEST COHORT)")
-    print("=" * 60)
-    table_headers = ["Model", "ROC-AUC", "PR-AUC", "Brier Score", "Log Loss", "ECE"]
+    print("=" * 70)
+    table_headers = ["Model", "Test ROC-AUC", "Test PR-AUC", "Test Brier Score", "Test Log Loss", "Test ECE"]
     table_rows = []
     for m_name, m_dict in results.items():
+        t = m_dict["test"]
         table_rows.append([
             m_name,
-            f"{m_dict['roc_auc']:.3f}",
-            f"{m_dict['pr_auc']:.3f}",
-            f"{m_dict['brier_score']:.4f}",
-            f"{m_dict['log_loss']:.4f}",
-            f"{m_dict['ece']:.4f}"
+            f"{t['roc_auc']:.3f}",
+            f"{t['pr_auc']:.3f}",
+            f"{t['brier_score']:.4f}",
+            f"{t['log_loss']:.4f}",
+            f"{t['ece']:.4f}"
         ])
     print(format_markdown_table(table_headers, table_rows))
 
@@ -87,7 +126,19 @@ def run_rq1_experiment(
     with open(out_json, "w") as f:
         json.dump(results, f, indent=2)
 
-    return pipe_rf, results, dataset
+    # Save detailed test predictions CSV (route, customer, label, probability)
+    selected_preds["route"] = selected_preds["route_id"] if "route_id" in selected_preds.columns else selected_preds["route_date"]
+    selected_preds["customer"] = selected_preds["customer_id"]
+    selected_preds["probability"] = selected_preds["predicted_risk_pi"]
+    selected_preds["selected_model"] = selected_name
+    selected_preds["target_label_definition"] = "route_propagated_promised_time_violation_proxy"
+    out_csv = os.path.join(output_dir, "rq1_test_predictions.csv")
+    cols_to_save = ["route", "customer", "label", "probability", "route_id", "customer_id", "predicted_risk_pi", "route_date", "selected_model", "target_label_definition"]
+    avail_cols = [c for c in cols_to_save if c in selected_preds.columns]
+    selected_preds[avail_cols].to_csv(out_csv, index=False)
+    print(f"[RQ1] Saved predictions to '{out_csv}' ({len(selected_preds)} rows).")
+
+    return selected_pipe, results, dataset
 
 if __name__ == "__main__":
     base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))

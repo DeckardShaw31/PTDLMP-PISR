@@ -49,26 +49,24 @@ def load_official_amazon_dataset(
     packages_path: Optional[str] = None,
     travel_times_path: Optional[str] = None,
     actual_sequences_path: Optional[str] = None,
-    fill_missing_travel_times_with_haversine: bool = True,
+    strict_mode: bool = True,
+    fill_missing_travel_times_with_haversine: bool = False,
     haversine_speed_kmh: float = 25.0,
-    default_sla_hours: Optional[float] = 4.0
+    default_sla_hours: Optional[float] = None
 ) -> Dict[str, RouteInstance]:
     """
     Adapter for the official Amazon Last Mile Routing Challenge dataset schema.
     Conforms to Section 3.2 and Section 5 of design.md.
 
-    Supports:
-      1. routes.json: {route_id: {station_code, date_YYYY_MM_DD, departure_time_utc, executor_capacity_cm3, stops: {stop_id: {lat, lng, type, zone_id}}}}
-      2. package_data.json: {route_id: {stop_id: {pkg_id: {time_window: {start_time_utc, end_time_utc}, planned_service_time_seconds, dimensions: {depth_cm, height_cm, width_cm}}}}}
-      3. travel_times.json: {route_id: {from_stop_id: {to_stop_id: travel_seconds}}}
-      4. actual_sequences.json: {route_id: {'actual': {stop_id: sequence_num}}}
-
-    Multi-package aggregation at stop level:
-      - service_seconds = sum(planned_service_time_seconds)
-      - promised_time = min(valid package time_window.end_time_utc)
-      - package_volume_cm3 = sum(depth * height * width)
-      - predicted_risk_pi = 0.0 (populated subsequently by RQ1 prediction model)
+    Strict Mode Configuration:
+      - Fails explicitly on missing or corrupt files (no silent exception suppression).
+      - Rejects missing travel-time matrix edges unless fill_missing_travel_times_with_haversine=True.
+      - Disables synthetic four-hour SLA imputation (default_sla_hours=None in strict mode).
+      - Audits actual sequence completeness and reports imputed-edge counts.
     """
+    total_imputed_edges = 0
+    total_missing_sla = 0
+
     # If routes_path is a directory, automatically discover files inside
     if os.path.isdir(routes_path):
         data_dir = routes_path
@@ -82,37 +80,64 @@ def load_official_amazon_dataset(
             raise FileNotFoundError(f"Could not find route data JSON file in directory '{data_dir}'")
         if packages_path is None:
             packages_path = next((os.path.join(data_dir, f) for f in packages_candidates if os.path.exists(os.path.join(data_dir, f))), None)
+            if strict_mode and packages_path is None:
+                raise FileNotFoundError(f"Strict mode: Required package data file not found in '{data_dir}'")
         if travel_times_path is None:
             travel_times_path = next((os.path.join(data_dir, f) for f in travel_candidates if os.path.exists(os.path.join(data_dir, f))), None)
+            if strict_mode and travel_times_path is None:
+                raise FileNotFoundError(f"Strict mode: Required travel times file not found in '{data_dir}'")
         if actual_sequences_path is None:
             actual_sequences_path = next((os.path.join(data_dir, f) for f in seq_candidates if os.path.exists(os.path.join(data_dir, f))), None)
+            if strict_mode and actual_sequences_path is None:
+                raise FileNotFoundError(f"Strict mode: Required actual sequences file not found in '{data_dir}'")
 
-    with open(routes_path, "r", encoding="utf-8") as f:
-        routes_raw = json.load(f)
+    if not os.path.exists(routes_path):
+        raise FileNotFoundError(f"Route data file does not exist: {routes_path}")
+
+    try:
+        with open(routes_path, "r", encoding="utf-8") as f:
+            routes_raw = json.load(f)
+    except Exception as e:
+        raise ValueError(f"Failed to load or parse route data file '{routes_path}': {e}") from e
 
     packages_raw = {}
-    if packages_path and os.path.exists(packages_path):
-        try:
-            with open(packages_path, "r", encoding="utf-8") as f:
-                packages_raw = json.load(f)
-        except Exception:
-            packages_raw = {}
+    if packages_path:
+        if not os.path.exists(packages_path):
+            if strict_mode:
+                raise FileNotFoundError(f"Strict mode: Packages file does not exist: {packages_path}")
+        else:
+            try:
+                with open(packages_path, "r", encoding="utf-8") as f:
+                    packages_raw = json.load(f)
+            except Exception as e:
+                if strict_mode:
+                    raise ValueError(f"Strict mode: Failed to parse packages file '{packages_path}': {e}") from e
 
     travel_times_raw = {}
-    if travel_times_path and os.path.exists(travel_times_path):
-        try:
-            with open(travel_times_path, "r", encoding="utf-8") as f:
-                travel_times_raw = json.load(f)
-        except Exception:
-            travel_times_raw = {}
+    if travel_times_path:
+        if not os.path.exists(travel_times_path):
+            if strict_mode:
+                raise FileNotFoundError(f"Strict mode: Travel times file does not exist: {travel_times_path}")
+        else:
+            try:
+                with open(travel_times_path, "r", encoding="utf-8") as f:
+                    travel_times_raw = json.load(f)
+            except Exception as e:
+                if strict_mode:
+                    raise ValueError(f"Strict mode: Failed to parse travel times file '{travel_times_path}': {e}") from e
 
     actual_sequences_raw = {}
-    if actual_sequences_path and os.path.exists(actual_sequences_path):
-        try:
-            with open(actual_sequences_path, "r", encoding="utf-8") as f:
-                actual_sequences_raw = json.load(f)
-        except Exception:
-            actual_sequences_raw = {}
+    if actual_sequences_path:
+        if not os.path.exists(actual_sequences_path):
+            if strict_mode:
+                raise FileNotFoundError(f"Strict mode: Actual sequences file does not exist: {actual_sequences_path}")
+        else:
+            try:
+                with open(actual_sequences_path, "r", encoding="utf-8") as f:
+                    actual_sequences_raw = json.load(f)
+            except Exception as e:
+                if strict_mode:
+                    raise ValueError(f"Strict mode: Failed to parse actual sequences file '{actual_sequences_path}': {e}") from e
 
     instances: Dict[str, RouteInstance] = {}
 
@@ -183,8 +208,11 @@ def load_official_amazon_dataset(
                     earliest_deadline = parse_iso_or_time_string(end_str, route_date)
                     pkg_count = 1
 
-            if earliest_deadline is None and default_sla_hours is not None and stype != "Station":
-                earliest_deadline = dep_time + timedelta(hours=default_sla_hours)
+            if earliest_deadline is None and stype != "Station":
+                if default_sla_hours is not None:
+                    earliest_deadline = dep_time + timedelta(hours=default_sla_hours)
+                else:
+                    total_missing_sla += 1
 
             stop_obj = Stop(
                 stop_id=stop_id,
@@ -223,7 +251,7 @@ def load_official_amazon_dataset(
                     if v in stops_dict:
                         tt_matrix[(u, v)] = float(sec)
 
-        # Distance matrix (Haversine)
+        # Distance matrix (Haversine straight-line proxy)
         dist_matrix: Dict[Tuple[str, str], float] = {}
         stop_ids = list(stops_dict.keys())
         for i in range(len(stop_ids)):
@@ -236,14 +264,29 @@ def load_official_amazon_dataset(
                 dist_matrix[(u, v)] = d_km
 
                 # Impute missing travel times via Haversine if requested
-                if fill_missing_travel_times_with_haversine and (u, v) not in tt_matrix:
+                if (u, v) not in tt_matrix:
                     if u == v:
                         tt_matrix[(u, v)] = 0.0
-                    else:
-                        # Convert km to seconds at given average km/h
+                    elif fill_missing_travel_times_with_haversine:
                         tt_matrix[(u, v)] = (d_km / haversine_speed_kmh) * 3600.0
+                        total_imputed_edges += 1
+                    elif strict_mode and travel_times_raw:
+                        raise ValueError(
+                            f"Strict mode violation: Route {route_id} missing travel time for edge ({u} -> {v}). "
+                            f"Haversine imputation is disabled in strict mode."
+                        )
 
         actual_seq = actual_sequences_raw.get(route_id, {}).get("actual")
+        if actual_seq is not None and strict_mode:
+            # Audit completeness of actual sequence
+            dropoff_stops = {s_id for s_id, s in stops_dict.items() if s.stop_type != "Station"}
+            actual_keys = set(actual_seq.keys())
+            missing_in_actual = dropoff_stops - actual_keys
+            if missing_in_actual:
+                raise ValueError(
+                    f"Strict mode audit: Route {route_id} actual sequence is incomplete. "
+                    f"Missing {len(missing_in_actual)} customer stops in actual sequence."
+                )
 
         instance = RouteInstance(
             route_id=route_id,
@@ -259,5 +302,9 @@ def load_official_amazon_dataset(
             actual_sequence=actual_seq
         )
         instances[route_id] = instance
+
+    if strict_mode:
+        print(f"[AmazonAdapter] Strict mode: successfully verified {len(instances)} routes. "
+              f"Imputed edges: {total_imputed_edges}, Missing SLA stops: {total_missing_sla}.")
 
     return instances

@@ -25,6 +25,11 @@ def get_edge_distance(instance: RouteInstance, u: str, v: str) -> float:
     """
     Returns distance between stop u and stop v in km.
     Uses precomputed matrix if available; otherwise computes Haversine distance.
+    
+    IMPORTANT METHODOLOGICAL NOTE:
+      All distance calculations throughout PTDLMP-PISR (including Delta D and cumulative
+      distance bounds) represent a Haversine (great-circle/straight-line) distance proxy.
+      They do not represent turn-by-turn road network distances.
     """
     if u == v:
         return 0.0
@@ -38,21 +43,21 @@ def get_edge_distance(instance: RouteInstance, u: str, v: str) -> float:
 def get_edge_travel_time(instance: RouteInstance, u: str, v: str, default_speed_kmh: float = 25.0) -> float:
     """
     Returns travel time between stop u and stop v in seconds.
-    Uses precomputed matrix if available; otherwise derives travel time from distance.
+    Uses precomputed matrix if available; otherwise derives travel time from Haversine distance.
     """
     if u == v:
         return 0.0
     if instance.travel_times is not None and (u, v) in instance.travel_times:
         return instance.travel_times[(u, v)]
     
-    # Distance in km / speed in km/s
+    # Distance in km / speed in km/s (Haversine-based fallback)
     dist_km = get_edge_distance(instance, u, v)
     speed_km_per_sec = default_speed_kmh / 3600.0
     return dist_km / speed_km_per_sec
 
 def compute_route_distance(instance: RouteInstance, route: List[str], return_to_depot: bool = False) -> float:
     """
-    Computes total route distance in km.
+    Computes total route distance in km using the Haversine straight-line distance proxy.
     By default in PTDLMP manuscript: depot-to-last-customer without return to depot.
     """
     if len(route) <= 1:

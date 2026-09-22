@@ -19,8 +19,7 @@ LEGAL_EX_ANTE_FEATURES = [
     "departure_hour",
     "day_of_week",
     "route_total_stops",
-    "route_total_service_min",
-    "hist_station_late_rate"
+    "route_total_service_min"
 ]
 
 FORBIDDEN_LEAKAGE_SUBSTRINGS = [
@@ -36,15 +35,14 @@ def assert_no_data_leakage(feature_names: List[str]) -> None:
     for f in feature_names:
         lower_f = f.lower()
         for forbidden in FORBIDDEN_LEAKAGE_SUBSTRINGS:
-            if forbidden in lower_f and lower_f not in ("hist_station_late_rate", "hist_zone_late_rate"):
+            if forbidden in lower_f:
                 raise ValueError(
                     f"Data Leakage Violation: Feature '{f}' contains forbidden token '{forbidden}'. "
                     f"Post-decision or outcome-derived features are strictly prohibited."
                 )
 
 def extract_ex_ante_features_for_route(
-    instance: RouteInstance,
-    historical_station_rates: Optional[Dict[str, float]] = None
+    instance: RouteInstance
 ) -> pd.DataFrame:
     """
     Extracts strictly ex-ante features for all customer stops on a given route.
@@ -55,7 +53,6 @@ def extract_ex_ante_features_for_route(
     dep_time = instance.departure_time
     dep_hour = dep_time.hour + dep_time.minute / 60.0
     day_of_week = dep_time.weekday()
-    station_code = instance.station_code or "UNKNOWN"
 
     customers = [
         s_id for s_id, s in instance.stops.items()
@@ -64,15 +61,12 @@ def extract_ex_ante_features_for_route(
 
     total_route_stops = len(customers)
     total_service_min = sum(instance.stops[c].service_seconds for c in customers) / 60.0
-    station_late_rate = 0.15
-    if historical_station_rates and station_code in historical_station_rates:
-        station_late_rate = historical_station_rates[station_code]
 
     rows = []
     for c_id in customers:
         stop = instance.stops[c_id]
         
-        # 1. Geographic distance from depot
+        # 1. Geographic distance from depot (Haversine proxy)
         dist_depot = haversine_distance(depot.lat, depot.lng, stop.lat, stop.lng)
 
         # 2. Local neighborhood density (stops within 2.0 km)
@@ -105,8 +99,7 @@ def extract_ex_ante_features_for_route(
             "departure_hour": dep_hour,
             "day_of_week": day_of_week,
             "route_total_stops": total_route_stops,
-            "route_total_service_min": total_service_min,
-            "hist_station_late_rate": station_late_rate
+            "route_total_service_min": total_service_min
         }
         rows.append(row)
 
@@ -115,13 +108,13 @@ def extract_ex_ante_features_for_route(
 
 def compute_ground_truth_labels(
     instance: RouteInstance,
-    use_actual_sequence_if_available: bool = True
+    use_actual_sequence_if_available: bool = True,
+    strict_sequence_audit: bool = True
 ) -> Dict[str, int]:
     """
-    Computes ground-truth binary lateness label y_i for all customer stops on a route.
-    If actual_sequence is provided: propagates schedule along the historical sequence.
-    Otherwise: propagates schedule along the baseline Nearest Neighbor sequence.
-    y_i = 1 if completion_time > promised_time else 0.
+    Computes ground-truth binary lateness labels as a route-propagated promised-time violation proxy.
+    Propagates the historical actual sequence with planned service times and historical travel times.
+    If strict_sequence_audit is True, asserts that the actual sequence is complete.
     """
     depot_id = instance.depot_id
     customers = [
@@ -138,8 +131,18 @@ def compute_ground_truth_labels(
             seq = [depot_id] + [s for s in seq if s != depot_id]
         if len(seq) == len(instance.stops):
             route_seq = seq
+        elif strict_sequence_audit:
+            raise ValueError(
+                f"Route '{instance.route_id}' has incomplete actual sequence: "
+                f"{len(seq)} stops in sequence vs {len(instance.stops)} total stops."
+            )
 
     if route_seq is None:
+        if strict_sequence_audit and use_actual_sequence_if_available:
+            raise ValueError(
+                f"Route '{instance.route_id}' has no actual sequence. "
+                "Silent baseline fallback is rejected under strict sequence audit."
+            )
         from ..routing.baseline import build_nearest_neighbor_baseline
         route_seq = build_nearest_neighbor_baseline(instance)
 

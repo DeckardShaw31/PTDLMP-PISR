@@ -138,8 +138,17 @@ def train_and_evaluate_pipeline(
     )
     pipeline.fit(X_train, y_train, X_val, y_val)
 
+    val_probs = pipeline.predict_proba(X_val)
+    val_metrics = evaluate_predictions(y_val, val_probs)
+
     test_probs = pipeline.predict_proba(X_test)
-    metrics = evaluate_predictions(y_test, test_probs)
+    test_metrics = evaluate_predictions(y_test, test_probs)
+
+    metrics = {
+        **test_metrics,
+        "test": test_metrics,
+        "validation": val_metrics
+    }
 
     df_test_preds = df_test.copy()
     df_test_preds["predicted_risk_pi"] = test_probs
@@ -149,15 +158,14 @@ def train_and_evaluate_pipeline(
 def inject_calibrated_risks_into_instances(
     instances: Dict[str, RouteInstance],
     pipeline: RiskPredictionPipeline,
-    feature_cols: List[str],
-    historical_station_rates: Optional[Dict[str, float]] = None
+    feature_cols: List[str]
 ) -> None:
     """
     Populates Stop.predicted_risk_pi on all RouteInstance objects using the trained model.
     Enforces strict ex-ante evaluation.
     """
     for route_id, inst in instances.items():
-        feat_df = extract_ex_ante_features_for_route(inst, historical_station_rates=historical_station_rates)
+        feat_df = extract_ex_ante_features_for_route(inst)
         if not feat_df.empty:
             X = feat_df[feature_cols]
             probs = pipeline.predict_proba(X)

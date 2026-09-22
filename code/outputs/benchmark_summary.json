@@ -7,7 +7,21 @@
       "pr_auc": 0.5959010039354922,
       "brier_score": 0.24040470662777913,
       "log_loss": 0.6704235239118199,
-      "ece": 0.009487435718497302
+      "ece": 0.009487435718497302,
+      "test": {
+        "roc_auc": 0.5949356368563685,
+        "pr_auc": 0.5959010039354922,
+        "brier_score": 0.24040470662777913,
+        "log_loss": 0.6704235239118199,
+        "ece": 0.009487435718497302
+      },
+      "validation": {
+        "roc_auc": 0.5326539557308787,
+        "pr_auc": 0.5145624331173764,
+        "brier_score": 0.23871114103862923,
+        "log_loss": 0.6639508802075477,
+        "ece": 0.01586781626492724
+      }
     }
   },
   "policy_summary": [
@@ -18,7 +32,9 @@
       "delta_nl": 3.6458333333333335,
       "dist_inc_pct": 2.0544066835804973,
       "accepted_moves": 17.854166666666668,
-      "is_feasible": 1.0
+      "is_feasible": 1.0,
+      "runtime_seconds": 0.2400991708335217,
+      "actionability_runtime_seconds": 1.2118388833332574
     },
     {
       "policy": "AB",
@@ -27,7 +43,9 @@
       "delta_nl": 3.5208333333333335,
       "dist_inc_pct": 2.1076436740384517,
       "accepted_moves": 17.291666666666668,
-      "is_feasible": 1.0
+      "is_feasible": 1.0,
+      "runtime_seconds": 0.24564614791696235,
+      "actionability_runtime_seconds": 1.2118388833332574
     },
     {
       "policy": "RB",
@@ -36,7 +54,9 @@
       "delta_nl": 0.8333333333333334,
       "dist_inc_pct": 1.9293792398116147,
       "accepted_moves": 7.416666666666667,
-      "is_feasible": 1.0
+      "is_feasible": 1.0,
+      "runtime_seconds": 0.22828391250004643,
+      "actionability_runtime_seconds": 1.2118388833332574
     },
     {
       "policy": "Slack",
@@ -45,7 +65,9 @@
       "delta_nl": 0.3958333333333333,
       "dist_inc_pct": 1.4777287605887075,
       "accepted_moves": 11.020833333333334,
-      "is_feasible": 1.0
+      "is_feasible": 1.0,
+      "runtime_seconds": 0.35609480833363705,
+      "actionability_runtime_seconds": 1.2118388833332574
     },
     {
       "policy": "Deadline",
@@ -54,7 +76,9 @@
       "delta_nl": 0.7291666666666666,
       "dist_inc_pct": 2.2807782164412633,
       "accepted_moves": 6.3125,
-      "is_feasible": 1.0
+      "is_feasible": 1.0,
+      "runtime_seconds": 0.17017059166695012,
+      "actionability_runtime_seconds": 1.2118388833332574
     },
     {
       "policy": "Random",
@@ -63,7 +87,9 @@
       "delta_nl": 0.7166666666666667,
       "dist_inc_pct": 1.95460221932594,
       "accepted_moves": 5.989583333333333,
-      "is_feasible": 1.0
+      "is_feasible": 1.0,
+      "runtime_seconds": 0.20287878958336023,
+      "actionability_runtime_seconds": 1.2118388833332574
     }
   ],
   "cell_paired_statistics": {
@@ -235,6 +261,8 @@
     "negative_nl_occurrences": 11,
     "zero_baseline_runs": 0,
     "total_runs": 288,
-    "feasibility_rate": 1.0
+    "feasibility_rate": 1.0,
+    "avg_actionability_runtime_seconds": 1.2118388833332574,
+    "avg_policy_runtime_seconds": 0.24052890347241293
   }
 }

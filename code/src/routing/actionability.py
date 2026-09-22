@@ -4,7 +4,7 @@ from typing import Dict, List, Tuple, Optional
 from datetime import datetime
 from ..data.schemas import RouteInstance
 from .schedule import propagate_schedule
-from .distance import compute_route_distance
+from .distance import compute_route_distance, get_edge_distance
 
 def compute_actionability_scores(
     instance: RouteInstance,
@@ -21,6 +21,13 @@ def compute_actionability_scores(
       - Computes Delta TT_ij = TT(R0) - TT(R0^{i -> j})
       - g_i = max(0, max_{j in F_i} Delta TT_ij)
     
+    Complexity & Profiling Note:
+      Actionability computation performs schedule propagation inside nested customer-position
+      loops (k from 1 to N, j from 1 to k-1), approximately cubic O(N^3) in route length N.
+      Optimization: Candidate distance is evaluated via O(1) local edge delta computation.
+      If cand_dist exceeds the (1 + delta) * D(R0) limit, full schedule propagation is pruned,
+      greatly accelerating computation while preserving exact equivalence.
+
     Returns:
       g_scores: Dict[customer_id, g_i]
       best_j: Dict[customer_id, best forward position j* in baseline evaluation]
@@ -33,20 +40,54 @@ def compute_actionability_scores(
     g_scores: Dict[str, float] = {}
     best_j_map: Dict[str, Optional[int]] = {}
 
+    n = len(baseline_route)
     # Customers start at index 1 (index 0 is depot)
-    for k in range(1, len(baseline_route)):
+    for k in range(1, n):
         cust_id = baseline_route[k]
         best_delta_tt = 0.0
         best_j = None
 
+        vk = baseline_route[k]
+        v_prev_k = baseline_route[k - 1]
+        v_next_k = baseline_route[k + 1] if k + 1 < n else (baseline_route[0] if return_to_depot else None)
+
         # Enumerate candidate forward positions j < k (j >= 1)
         for j in range(1, k):
-            cand_route = list(baseline_route)
-            val = cand_route.pop(k)
-            cand_route.insert(j, val)
+            vj = baseline_route[j]
+            v_prev_j = baseline_route[j - 1]
 
-            cand_dist = compute_route_distance(instance, cand_route, return_to_depot=return_to_depot)
+            # O(1) distance delta check
+            if j == k - 1:
+                v_prev2 = baseline_route[k - 2]
+                delta_d = (
+                    - get_edge_distance(instance, v_prev2, v_prev_k)
+                    - get_edge_distance(instance, v_prev_k, vk)
+                    + get_edge_distance(instance, v_prev2, vk)
+                    + get_edge_distance(instance, vk, v_prev_k)
+                )
+                if v_next_k:
+                    delta_d += (
+                        - get_edge_distance(instance, vk, v_next_k)
+                        + get_edge_distance(instance, v_prev_k, v_next_k)
+                    )
+            else:
+                delta_d = (
+                    - get_edge_distance(instance, v_prev_j, vj)
+                    - get_edge_distance(instance, v_prev_k, vk)
+                    + get_edge_distance(instance, v_prev_j, vk)
+                    + get_edge_distance(instance, vk, vj)
+                )
+                if v_next_k:
+                    delta_d += (
+                        - get_edge_distance(instance, vk, v_next_k)
+                        + get_edge_distance(instance, v_prev_k, v_next_k)
+                    )
+
+            cand_dist = base_dist + delta_d
             if cand_dist <= dist_limit:
+                cand_route = list(baseline_route)
+                val = cand_route.pop(k)
+                cand_route.insert(j, val)
                 cand_sched = propagate_schedule(instance, cand_route, use_completion_time=use_completion_time, return_to_depot=return_to_depot)
                 delta_tt = base_tt - cand_sched.total_tardiness
                 if delta_tt > best_delta_tt:

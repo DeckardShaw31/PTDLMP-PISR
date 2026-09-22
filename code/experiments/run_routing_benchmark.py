@@ -1,6 +1,7 @@
 import os
 import sys
 import json
+import time
 from typing import Dict, List, Tuple, Any
 import numpy as np
 import pandas as pd
@@ -26,8 +27,8 @@ def run_benchmark_experiments():
     o_dir = os.path.join(base_dir, "outputs")
     os.makedirs(o_dir, exist_ok=True)
 
-    print(f"[Benchmark] Loading Amazon routes from '{d_dir}'...")
-    instances = load_official_amazon_dataset(d_dir)
+    print(f"[Benchmark] Loading Amazon routes from '{raw_dir}'...")
+    instances = load_official_amazon_dataset(raw_dir, strict_mode=True, default_sla_hours=4.0)
     
     # 1. Build dataset across all routes for RQ1 model
     all_rows = []
@@ -71,6 +72,7 @@ def run_benchmark_experiments():
     random_seeds = list(range(42, 52))  # Exactly 10 random seeds (42 to 51) for empirical Random distribution
 
     run_records = []
+    all_individual_seed_records = []
 
     # Run on Nearest Neighbor baseline
     for r_idx, r_id in enumerate(test_route_ids, 1):
@@ -86,8 +88,10 @@ def run_benchmark_experiments():
         base_dist = sched_base.total_distance
 
         for delta in deltas:
-            # Precompute actionability g_i
+            # Precompute actionability g_i with runtime measurement
+            t_act_start = time.perf_counter()
             g_scores, _ = compute_actionability_scores(inst, base_route, delta=delta)
+            actionability_runtime_sec = time.perf_counter() - t_act_start
 
             for B in budgets:
                 for pol in policies:
@@ -95,11 +99,13 @@ def run_benchmark_experiments():
                         # Run across 10 random seeds
                         seed_runs = []
                         for s_seed in random_seeds:
+                            t_seed_start = time.perf_counter()
                             ranked = rank_candidates(inst, base_route, policy="Random", g_scores=g_scores, random_seed=s_seed)
                             selected = select_intervention_set(ranked, budget_b=B, num_customers=num_customers)
                             final_r, logs = selective_forward_relocation(inst, base_route, selected, delta=delta)
                             v_res = validate_route(inst, final_r, baseline_route=base_route, delta=delta)
                             sched_fin = propagate_schedule(inst, final_r)
+                            seed_runtime_sec = time.perf_counter() - t_seed_start
 
                             d_tt = base_tt - sched_fin.total_tardiness
                             d_nl = base_nl - sched_fin.total_lateness
@@ -107,9 +113,31 @@ def run_benchmark_experiments():
                             tt_red_pct = (d_tt / base_tt) * 100.0 if base_tt > 0 else 0.0
                             acc = sum(1 for l in logs if l.accepted)
 
+                            seed_rec = {
+                                "route_id": r_id,
+                                "baseline": "NearestNeighbor",
+                                "delta": delta,
+                                "budget": B,
+                                "policy": "Random",
+                                "random_seed": s_seed,
+                                "base_tt": base_tt,
+                                "base_nl": base_nl,
+                                "base_dist": base_dist,
+                                "delta_tt": d_tt,
+                                "delta_nl": d_nl,
+                                "tt_red_pct": tt_red_pct,
+                                "dist_inc_pct": d_dist_pct,
+                                "accepted_moves": acc,
+                                "num_candidates": len(selected),
+                                "is_feasible": v_res.feasible,
+                                "runtime_seconds": seed_runtime_sec,
+                                "actionability_runtime_seconds": actionability_runtime_sec
+                            }
+                            all_individual_seed_records.append(seed_rec)
                             seed_runs.append({
                                 "d_tt": d_tt, "d_nl": d_nl, "d_dist_pct": d_dist_pct,
-                                "tt_red_pct": tt_red_pct, "acc": acc, "feasible": v_res.feasible
+                                "tt_red_pct": tt_red_pct, "acc": acc, "feasible": v_res.feasible,
+                                "runtime_seconds": seed_runtime_sec
                             })
 
                         # Record mean across seeds
@@ -128,15 +156,19 @@ def run_benchmark_experiments():
                             "dist_inc_pct": float(np.mean([x["d_dist_pct"] for x in seed_runs])),
                             "accepted_moves": float(np.mean([x["acc"] for x in seed_runs])),
                             "num_candidates": len(selected),
-                            "is_feasible": all(x["feasible"] for x in seed_runs)
+                            "is_feasible": all(x["feasible"] for x in seed_runs),
+                            "runtime_seconds": float(np.mean([x["runtime_seconds"] for x in seed_runs])),
+                            "actionability_runtime_seconds": actionability_runtime_sec
                         })
 
                     else:
+                        t_pol_start = time.perf_counter()
                         ranked = rank_candidates(inst, base_route, policy=pol, g_scores=g_scores)
                         selected = select_intervention_set(ranked, budget_b=B, num_customers=num_customers)
                         final_r, logs = selective_forward_relocation(inst, base_route, selected, delta=delta)
                         v_res = validate_route(inst, final_r, baseline_route=base_route, delta=delta)
                         sched_fin = propagate_schedule(inst, final_r)
+                        pol_runtime_sec = time.perf_counter() - t_pol_start
 
                         d_tt = base_tt - sched_fin.total_tardiness
                         d_nl = base_nl - sched_fin.total_lateness
@@ -159,7 +191,9 @@ def run_benchmark_experiments():
                             "dist_inc_pct": d_dist_pct,
                             "accepted_moves": acc,
                             "num_candidates": len(selected),
-                            "is_feasible": v_res.feasible
+                            "is_feasible": v_res.feasible,
+                            "runtime_seconds": pol_runtime_sec,
+                            "actionability_runtime_seconds": actionability_runtime_sec
                         })
 
     # Robustness: Clarke-Wright baseline runs at primary setting (B=0.20, delta=0.05)
@@ -175,14 +209,18 @@ def run_benchmark_experiments():
 
         delta = 0.05
         B = 0.20
+        t_cw_act = time.perf_counter()
         g_scores, _ = compute_actionability_scores(inst, cw_route, delta=delta)
+        cw_act_runtime = time.perf_counter() - t_cw_act
 
         for pol in ["RA", "AB", "RB", "Slack"]:
+            t_cw_pol = time.perf_counter()
             ranked = rank_candidates(inst, cw_route, policy=pol, g_scores=g_scores)
             selected = select_intervention_set(ranked, budget_b=B, num_customers=num_customers)
             final_r, logs = selective_forward_relocation(inst, cw_route, selected, delta=delta)
             v_res = validate_route(inst, final_r, baseline_route=cw_route, delta=delta)
             sched_fin = propagate_schedule(inst, final_r)
+            cw_pol_runtime = time.perf_counter() - t_cw_pol
 
             d_tt = cw_tt - sched_fin.total_tardiness
             d_nl = cw_nl - sched_fin.total_lateness
@@ -203,12 +241,18 @@ def run_benchmark_experiments():
                 "tt_red_pct": tt_red_pct,
                 "dist_inc_pct": d_dist_pct,
                 "accepted_moves": sum(1 for l in logs if l.accepted),
-                "is_feasible": v_res.feasible
+                "is_feasible": v_res.feasible,
+                "runtime_seconds": cw_pol_runtime,
+                "actionability_runtime_seconds": cw_act_runtime
             })
 
     df_runs = pd.DataFrame(run_records)
     df_runs.to_csv(os.path.join(o_dir, "routing_benchmark_runs.csv"), index=False)
     print(f"[Benchmark] Completed {len(df_runs)} factorial runs on held-out routes.")
+
+    df_seed_runs = pd.DataFrame(all_individual_seed_records)
+    df_seed_runs.to_csv(os.path.join(o_dir, "random_seed_runs.csv"), index=False)
+    print(f"[Benchmark] Saved {len(df_seed_runs)} individual random seed runs to 'random_seed_runs.csv'.")
 
     # 5. Paired statistical hypothesis tests: RA vs competitors across all runs
     df_nn = df_runs[df_runs["baseline"] == "NearestNeighbor"]
@@ -237,13 +281,15 @@ def run_benchmark_experiments():
         "delta_nl": "mean",
         "dist_inc_pct": "mean",
         "accepted_moves": "mean",
-        "is_feasible": "mean"
+        "is_feasible": "mean",
+        "runtime_seconds": "mean",
+        "actionability_runtime_seconds": "mean"
     }).loc[["RA", "AB", "RB", "Slack", "Deadline", "Random"]].reset_index()
 
     print("\n" + "=" * 80)
     print("EMPIRICAL ROUTING BENCHMARK RESULTS (HELD-OUT AMAZON ROUTES)")
     print("=" * 80)
-    summary_headers = ["Policy", "Avg Delta TT (min)", "Avg TT Red (%)", "Avg Delta NL", "Avg Dist Inc (%)", "Avg Relocations", "Feasibility Rate"]
+    summary_headers = ["Policy", "Avg Delta TT (min)", "Avg TT Red (%)", "Avg Delta NL", "Avg Dist Inc (%)", "Avg Relocations", "Feasibility Rate", "Runtime (s)"]
     summary_rows = []
     for _, row in policy_summary.iterrows():
         summary_rows.append([
@@ -253,7 +299,8 @@ def run_benchmark_experiments():
             f"+{row['delta_nl']:.2f}",
             f"+{row['dist_inc_pct']:.2f}%",
             f"{row['accepted_moves']:.2f}",
-            f"{row['is_feasible']:.1%}"
+            f"{row['is_feasible']:.1%}",
+            f"{row['runtime_seconds']:.3f}s"
         ])
     print(format_markdown_table(summary_headers, summary_rows))
 
@@ -341,7 +388,9 @@ def run_benchmark_experiments():
             "negative_nl_occurrences": len(negative_nl_runs),
             "zero_baseline_runs": len(zero_baseline_runs),
             "total_runs": len(df_nn),
-            "feasibility_rate": float(df_nn['is_feasible'].mean())
+            "feasibility_rate": float(df_nn['is_feasible'].mean()),
+            "avg_actionability_runtime_seconds": float(df_nn['actionability_runtime_seconds'].mean()),
+            "avg_policy_runtime_seconds": float(df_nn['runtime_seconds'].mean())
         }
     }
     with open(os.path.join(o_dir, "benchmark_summary.json"), "w") as f:

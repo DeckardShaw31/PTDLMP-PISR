@@ -32,8 +32,8 @@ ENV/
 htmlcov/
 .hypothesis/
 
-# Manuscript drafts and LaTeX build artifacts
-*.tex
+# Manuscript binary drafts and LaTeX build artifacts
+*_raw.tex
 *.docx
 *.doc
 *.aux

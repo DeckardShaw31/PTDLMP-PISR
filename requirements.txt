@@ -1,0 +1,7 @@
+# PTDLMP-PISR Dependencies (Pinned for clean reproducibility)
+numpy==2.2.6
+pandas==2.3.3
+scipy==1.16.3
+scikit-learn==1.6.1
+matplotlib==3.10.8
+pytest==9.1.1
