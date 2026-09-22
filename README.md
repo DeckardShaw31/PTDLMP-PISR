@@ -130,12 +130,12 @@ This generates `routing_benchmark_runs.csv`, `robustness_clark_wright_runs.csv`,
 
 | Policy | Targeting Formula | Avg $\Delta TT$ (min) | Avg TT Red (%) | Avg $\Delta NL$ (late avoided) | Avg Dist Inc (%) | Feasibility Rate |
 |---|---|---:|---:|---:|---:|---:|
-| **RA** | $p_i \cdot g_i$ | **+1,453.09 min** | **12.41%** | **+3.62** | +2.04% | **100.0%** |
-| **AB** | $g_i$ | **+1,444.40 min** | **12.33%** | **+3.58** | +2.13% | **100.0%** |
-| **RB** | $p_i$ | **+294.45 min** | **2.40%** | **+0.60** | +1.90% | **100.0%** |
-| **Slack** | $\tau_i - c_i(R^0)$ | **+403.50 min** | **3.96%** | **+0.40** | +1.48% | **100.0%** |
-| **Deadline** | $\tau_i$ | **+272.05 min** | **2.17%** | **+0.73** | +2.28% | **100.0%** |
-| **Random** | Uniform Random | **+308.98 min** | **2.62%** | **+0.78** | +1.88% | **100.0%** |
+| **RA** | $p_i \cdot g_i$ | **+1,417.91 min** | **12.1%** | **+3.65** | +2.05% | **100.0%** |
+| **AB** | $g_i$ | **+1,434.54 min** | **12.2%** | **+3.52** | +2.11% | **100.0%** |
+| **RB** | $p_i$ | **+367.63 min** | **2.9%** | **+0.83** | +1.93% | **100.0%** |
+| **Slack** | $\tau_i - c_i(R^0)$ | **+403.50 min** | **4.0%** | **+0.40** | +1.48% | **100.0%** |
+| **Deadline** | $\tau_i$ | **+272.05 min** | **2.2%** | **+0.73** | +2.28% | **100.0%** |
+| **Random** | Uniform Random (10 seeds) | **+299.49 min** | **2.5%** | **+0.72** | +1.95% | **100.0%** |
 
 ### Statistical Inference: Cell-Level vs. Route-Clustered Tests
 
@@ -143,13 +143,13 @@ $$\Delta TT(\text{RA}) - \Delta TT(\text{Competitor})$$
 
 | Comparison | Mean Diff (min) | Cell-Level $p$ ($N=48$) | Route-Clustered $p$ ($N=3$) | Holm-Bonferroni Adj. $p$ |
 |---|---:|---:|---:|---:|
-| **RA vs. AB** | **+8.69 min** | $0.1768$ | $0.1730$ | $0.3460$ |
-| **RA vs. RB** | **+1,158.64 min** | $< 0.0001$ | $0.0227$ | $0.0908$ |
-| **RA vs. Slack** | **+1,049.59 min** | $< 0.0001$ | $0.0851$ | $0.0908$ |
-| **RA vs. Deadline** | **+1,181.05 min** | $< 0.0001$ | $0.0208$ | $0.1040$ |
-| **RA vs. Random** | **+1,144.12 min** | $< 0.0001$ | $0.0270$ | $0.0908$ |
+| **RA vs. AB** | **-16.62 min** | $0.3626$ | $0.4825$ | $0.4825$ |
+| **RA vs. RB** | **+1,050.28 min** | $< 0.0001$ | $0.0126$ | $0.0631$ |
+| **RA vs. Slack** | **+1,014.41 min** | $< 0.0001$ | $0.0877$ | $0.1754$ |
+| **RA vs. Deadline** | **+1,145.87 min** | $< 0.0001$ | $0.0210$ | $0.0839$ |
+| **RA vs. Random** | **+1,118.42 min** | $< 0.0001$ | $0.0248$ | $0.0839$ |
 
-*Methodological Note*: When clustering at the route level ($N=3$ independent held-out routes), standard errors widen appropriately to guard against pseudo-replication. While RA outperforms RB by over 1,100 minutes, statistical power after multiple testing correction requires expanding the held-out sample size ($N \ge 20$ routes) for formal rejection of the null hypothesis at $\alpha=0.05$.
+*Methodological Note*: When clustering at the route level ($N=3$ independent held-out routes), standard errors widen appropriately to guard against pseudo-replication. While RA outperforms RB by over 1,000 minutes, statistical power after multiple testing correction requires expanding the held-out sample size ($N \ge 20$ routes) for formal rejection of the null hypothesis at $\alpha=0.05$.
 
 ---
 

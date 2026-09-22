@@ -18,19 +18,19 @@ This report presents an empirical evaluation of the **Prediction-Informed Select
 1. **RQ1 (Predictability of Promised Delivery Lateness Proxy)**:
    - Evaluated on **2,038 drop-off delivery stops** (2,051 total stops including depots) across 12 calendar dates from **7 station codes** (`DBO2`, `DCH4`, `DLA7`, `DLA8`, `DLA9`, `DSE4`, `DSE5`).
    - *Label Definition*: The public Amazon Challenge dataset does not provide observed customer-level delivery completion timestamps. Consequently, ground-truth delivery lateness is constructed as a **route-propagated time-window violation proxy** computed by propagating the driver's actual sequence through the official historical average travel-time matrix and planned service durations. Base lateness prevalence is 50.34%.
-   - *Model Selection*: Based strictly on **validation set criteria** (chronological split), **Logistic Regression** is the superior model, achieving a validation Brier score of **0.2387** (vs. 0.2461 for Random Forest), validation log loss of **0.6640** (vs. 0.6848), validation ECE of **0.0159** (vs. 0.1293), and validation ROC-AUC of **0.5327** (vs. 0.4920). On the held-out test cohort, Logistic Regression achieves ROC-AUC = 0.595, PR-AUC = 0.596, and Brier score = 0.2404.
+   - *Model Selection on Validation Split*: Based strictly on **validation set criteria** (chronological split), **Logistic Regression** is the superior model, achieving a validation Brier score of **0.2387** (vs. 0.2461 for Random Forest), validation log loss of **0.6640** (vs. 0.6848), validation ECE of **0.0159** (vs. 0.1293), and validation ROC-AUC of **0.5327** (vs. 0.4920). Consequently, calibrated probabilities from Logistic Regression were selected to populate $p_i$ in the routing benchmark. On the held-out test cohort, Logistic Regression achieves ROC-AUC = 0.595, PR-AUC = 0.596, and Brier score = 0.2404.
 2. **RQ2 (Routing Effectiveness & Policy Comparison)**:
-   - Evaluated across **288 factorial runs** on 3 held-out test routes (`DBO2`, `DSE4`, and `DSE5`) spanning budgets $B \in \{5\%, 10\%, 20\%, 30\%\}$ and distance tolerances $\delta \in \{0\%, 2\%, 5\%, 10\%\}$.
+   - Evaluated across **288 factorial runs** on 3 held-out test routes (`DBO2`, `DSE4`, and `DSE5`) spanning budgets $B \in \{5\%, 10\%, 20\%, 30\%\}$ and distance tolerances $\delta \in \{0\%, 2\%, 5\%, 10\%\}$. The Random baseline is evaluated across 10 distinct random seeds (seeds 42 to 51) per parameter cell.
    - **Proposition 1 Monotonicity**: Verified in 100% of runs ($\min \Delta TT \geq 0.0000$ min, exactly 0 violations). Resequencing never degraded route performance.
    - **Hard Feasibility**: 100% of final routes passed the independent validator (no subtours, no duplicated/dropped customers, depot departure preserved).
 3. **Core Hypothesis Resolution & Statistical Inference**:
    - **Cell-Level vs. Route-Clustered Tests**: Cell-level tests ($N=48$ cells) yield nominal $p < 0.0001$ for comparisons against heuristics. However, treating repeated $(B, \delta)$ cells as independent introduces pseudo-replication. When clustering at the route level ($N=3$ independent held-out routes):
-     - **RA vs. RB (Pure Risk)**: Mean diff = **+1,158.64 min**, unadjusted $p = 0.0227$. Pure risk targeting selects stops that are geographically inaccessible, squandering limited relocation capacity.
-     - **RA vs. Slack**: Mean diff = **+1,049.59 min**, unadjusted $p = 0.0851$.
-     - **RA vs. Deadline**: Mean diff = **+1,181.05 min**, unadjusted $p = 0.0208$.
-     - **RA vs. Random**: Mean diff = **+1,144.12 min**, unadjusted $p = 0.0270$.
-     - **RA vs. AB (Pure Actionability)**: Mean diff = **+8.69 min**, unadjusted $p = 0.1730$.
-   - **Multiple Testing Correction**: Under Holm-Bonferroni correction across the 5 policy comparisons, none of the differences reach formal significance at $\alpha = 0.05$ (adjusted $p \in [0.0908, 0.3460]$) due to the limited degrees of freedom ($N=3$ routes). While the directional effect sizes are large (>1,000 minutes saved), establishing formal statistical significance under route clustering requires expanding the held-out sample to $N \ge 20$ independent routes.
+     - **RA vs. RB (Pure Risk)**: Mean diff = **+1,050.28 min**, unadjusted $p = 0.0126$, Holm-Bonferroni adjusted $p = 0.0631$. Pure risk targeting selects stops that are geographically inaccessible, squandering limited relocation capacity.
+     - **RA vs. Slack**: Mean diff = **+1,014.41 min**, unadjusted $p = 0.0877$, Holm-Bonferroni adjusted $p = 0.1754$.
+     - **RA vs. Deadline**: Mean diff = **+1,145.87 min**, unadjusted $p = 0.0210$, Holm-Bonferroni adjusted $p = 0.0839$.
+     - **RA vs. Random**: Mean diff = **+1,118.42 min**, unadjusted $p = 0.0248$, Holm-Bonferroni adjusted $p = 0.0839$.
+     - **RA vs. AB (Pure Actionability)**: Mean diff = **-16.62 min**, unadjusted $p = 0.4825$, Holm-Bonferroni adjusted $p = 0.4825$.
+   - **Multiple Testing Correction**: Under Holm-Bonferroni correction across the 5 policy comparisons, none of the differences reach formal significance at $\alpha = 0.05$ (adjusted $p \in [0.0631, 0.4825]$) due to the limited degrees of freedom ($N=3$ routes). While the directional effect sizes are substantial (>1,000 minutes saved), establishing formal statistical significance under route clustering requires expanding the held-out sample to $N \ge 20$ independent routes.
    - **Scientific Insight**: Actionability score $g_i$ captures virtually all single-vehicle schedule headroom. Weighting by predicted risk ($p_i \cdot g_i$) provides a sensible tie-breaker without degrading performance, but does not yield a statistically significant advantage over pure $g_i$ alone in this single-vehicle setting.
 
 ---
@@ -74,7 +74,7 @@ This report presents an empirical evaluation of the **Prediction-Informed Select
 - **Held-Out Test Routes**: 3 independent routes spanning 407 drop-off delivery stops across test stations `DBO2`, `DSE4`, and `DSE5`.
 - **Factors**:
   - Baseline route: Nearest Neighbor ($R^0$).
-  - Targeting policies: RA, AB, RB, Slack, Deadline, Random.
+  - Targeting policies: RA, AB, RB, Slack, Deadline, Random (evaluated over 10 random seeds: 42 to 51).
   - Intervention budget: $B \in \{0.05, 0.10, 0.20, 0.30\}$.
   - Distance tolerance: $\delta \in \{0.00, 0.02, 0.05, 0.10\}$.
 - **Total Factorial Runs**: 288 runs (3 routes $\times$ 4 budgets $\times$ 4 tolerances $\times$ 6 policies).
@@ -83,12 +83,12 @@ This report presents an empirical evaluation of the **Prediction-Informed Select
 
 | Policy | Targeting Formula | Avg $\Delta TT$ (min) | Avg TT Red (%) | Avg $\Delta NL$ | Avg Dist Inc (%) | Avg Relocations | Feasibility Rate |
 |---|---|---:|---:|---:|---:|---:|---:|
-| **RA** | $p_i \cdot g_i$ | **+1,453.09 min** | **12.41%** | **+3.62** | +2.04% | 17.17 | **100.0%** |
-| **AB** | $g_i$ | **+1,444.40 min** | **12.33%** | **+3.58** | +2.13% | 17.35 | **100.0%** |
-| **RB** | $p_i$ | **+294.45 min** | **2.40%** | **+0.60** | +1.90% | 7.25 | **100.0%** |
-| **Slack** | $\tau_i - c_i(R^0)$ | **+403.50 min** | **3.96%** | **+0.40** | +1.48% | 11.02 | **100.0%** |
-| **Deadline** | $\tau_i$ | **+272.05 min** | **2.17%** | **+0.73** | +2.28% | 6.31 | **100.0%** |
-| **Random** | Uniform Random | **+308.98 min** | **2.62%** | **+0.78** | +1.88% | 6.10 | **100.0%** |
+| **RA** | $p_i \cdot g_i$ | **+1,417.91 min** | **12.1%** | **+3.65** | +2.05% | 17.85 | **100.0%** |
+| **AB** | $g_i$ | **+1,434.54 min** | **12.2%** | **+3.52** | +2.11% | 17.29 | **100.0%** |
+| **RB** | $p_i$ | **+367.63 min** | **2.9%** | **+0.83** | +1.93% | 7.42 | **100.0%** |
+| **Slack** | $\tau_i - c_i(R^0)$ | **+403.50 min** | **4.0%** | **+0.40** | +1.48% | 11.02 | **100.0%** |
+| **Deadline** | $\tau_i$ | **+272.05 min** | **2.2%** | **+0.73** | +2.28% | 6.31 | **100.0%** |
+| **Random** | Uniform Random (10 seeds) | **+299.49 min** | **2.5%** | **+0.72** | +1.95% | 5.99 | **100.0%** |
 
 ---
 
@@ -96,18 +96,18 @@ This report presents an empirical evaluation of the **Prediction-Informed Select
 
 $$\Delta TT(\text{RA}) - \Delta TT(\text{Competitor})$$
 
-| Comparison | Mean Diff (min) | 95% Confidence Interval | Cell-Level $p$ ($N=48$) | Route-Clustered $t$ ($N=3$) | Route-Clustered $p$ (unadjusted) | Holm-Bonferroni Adj. $p$ | Significant at $\alpha=0.05$? |
+| Comparison | Mean Diff (min) | 95% Bootstrap CI | Cell-Level $p$ ($N=48$) | Route-Clustered $t$ ($N=3$) | Route-Clustered $p$ (unadjusted) | Holm-Bonferroni Adj. $p$ | Significant at $\alpha=0.05$? |
 |---|---:|:---:|---:|---:|---:|---:|:---:|
-| **RA vs. AB** | **+8.69 min** | [-3.06, +21.93] | 0.1768 | +2.080 | 0.1730 | 0.3460 | **NO** |
-| **RA vs. RB** | **+1,158.64 min** | [+1,043.49, +1,270.88] | < 0.0001 | +6.526 | 0.0227 | 0.0908 | **Marginal** (unadjusted) |
-| **RA vs. Slack** | **+1,049.59 min** | [+880.44, +1,216.10] | < 0.0001 | +3.205 | 0.0851 | 0.0908 | **NO** |
-| **RA vs. Deadline** | **+1,181.05 min** | [+1,064.95, +1,302.08] | < 0.0001 | +6.825 | 0.0208 | 0.1040 | **Marginal** (unadjusted) |
-| **RA vs. Random** | **+1,144.12 min** | [+1,022.29, +1,272.24] | < 0.0001 | +5.967 | 0.0270 | 0.0908 | **Marginal** (unadjusted) |
+| **RA vs. AB** | **-16.62 min** | [-49.92, +18.20] | 0.3626 | -0.855 | 0.4825 | 0.4825 | **NO** |
+| **RA vs. RB** | **+1,050.28 min** | [+932.39, +1179.75] | < 0.0001 | +8.816 | 0.0126 | 0.0631 | **Marginal** (unadjusted) |
+| **RA vs. Slack** | **+1,014.41 min** | [+846.26, +1179.74] | < 0.0001 | +3.151 | 0.0877 | 0.1754 | **NO** |
+| **RA vs. Deadline** | **+1,145.87 min** | [+1020.43, +1264.07] | < 0.0001 | +6.795 | 0.0210 | 0.0839 | **Marginal** (unadjusted) |
+| **RA vs. Random** | **+1,118.42 min** | [+987.39, +1253.40] | < 0.0001 | +6.235 | 0.0248 | 0.0839 | **Marginal** (unadjusted) |
 
 ### Key Methodological Takeaways:
 1. **Dangers of Pseudo-Replication**: Cell-level pooling treats repeated runs on the same route as independent, artificially inflating statistical power ($p < 0.0001$). Route clustering correctly identifies the independent experimental unit ($N=3$), reflecting the true sampling uncertainty.
-2. **Substantive vs. Statistical Significance**: Although the magnitude of tardiness reduction for RA over RB (+1,158 min) and Deadline (+1,181 min) is operationally dramatic, statistical confirmation after family-wise error rate control requires expanding the route sample ($N \ge 20$).
-3. **Equivalence of RA and AB**: Both at the cell level ($p = 0.1768$) and route-clustered level ($p = 0.1730$), RA and AB are statistically indistinguishable. Actionability $g_i$ carries the primary optimization signal.
+2. **Substantive vs. Statistical Significance**: Although the magnitude of tardiness reduction for RA over RB (+1,050 min) and Deadline (+1,146 min) is operationally dramatic, statistical confirmation after family-wise error rate control requires expanding the route sample ($N \ge 20$).
+3. **Equivalence of RA and AB**: Both at the cell level ($p = 0.3626$) and route-clustered level ($p = 0.4825$), RA and AB are statistically indistinguishable. Actionability $g_i$ carries the primary optimization signal.
 
 ---
 
@@ -117,11 +117,11 @@ $$\Delta TT(\text{RA}) - \Delta TT(\text{Competitor})$$
 |---|---:|---:|:---:|
 | **Minimum $\Delta TT$ across all runs** | **0.0000 min** | $\Delta TT \ge 0$ (Proposition 1) | **VERIFIED (0 violations)** |
 | **Route Feasibility Rate** | **100.0%** (288/288) | 100% | **VERIFIED** |
-| **Occurrences of $\Delta NL < 0$ while $\Delta TT > 0$** | **9 runs** | Allowed by Proposition 1 remark | **OBSERVED & DOCUMENTED** |
+| **Occurrences of $\Delta NL < 0$ while $\Delta TT > 0$** | **11 runs** | Allowed by Proposition 1 remark | **OBSERVED & DOCUMENTED** |
 | **Runs starting with 0 baseline tardiness** | **0 of 288 (0.0%)** | Realistic operational stress | **CONFIRMED** |
 
 ### Clarification on $\Delta NL < 0$:
-In 9 factorial runs, advancing a customer with large tardiness saved substantial delay minutes ($\Delta TT > 0$), but pushed downstream customers slightly past their deadline window, increasing total late deliveries by 1 ($\Delta NL = -1$). This empirically illustrates the distinction between the smooth continuous objective (total tardiness) and the non-smooth step objective (lateness count).
+In 11 factorial runs, advancing a customer with large tardiness saved substantial delay minutes ($\Delta TT > 0$), but pushed downstream customers slightly past their deadline window, increasing total late deliveries by 1 ($\Delta NL = -1$). This empirically illustrates the distinction between the smooth continuous objective (total tardiness) and the non-smooth step objective (lateness count).
 
 ---
 
@@ -131,16 +131,16 @@ Under Clarke-Wright baseline tours ($B = 0.20$, $\delta = 0.05$):
 
 | Policy | Avg $\Delta TT$ (min) | Avg TT Reduction (%) | Avg $\Delta NL$ | Avg Distance Increase (%) |
 |---|---:|---:|---:|---:|
-| **RA** | **+1,965.55 min** | **14.32%** | **+7.00** | +4.64% |
-| **AB** | **+1,931.79 min** | **14.11%** | **+7.00** | +4.68% |
-| **RB** | **+473.48 min** | **3.29%** | **+0.67** | +3.86% |
-| **Slack** | **+938.52 min** | **6.03%** | **+2.67** | +4.59% |
+| **RA** | **+1,761.54 min** | **13.1%** | **+6.00** | +4.75% |
+| **AB** | **+1,931.79 min** | **14.1%** | **+7.00** | +4.67% |
+| **RB** | **+577.97 min** | **4.2%** | **+1.33** | +4.19% |
+| **Slack** | **+938.52 min** | **6.0%** | **+2.67** | +4.59% |
 
 ---
 
 ## 6. Recommendations for Manuscript Revision (`main.tex`)
 
-1. **Avoid Overstating Statistical Claims**: Explicitly state that while RA achieves large operational reductions over RB (+1,158 min) and Slack (+1,050 min), route-clustered testing on $N=3$ test routes yields marginal unadjusted significance ($p \approx 0.02 - 0.08$) that does not survive Holm-Bonferroni correction.
+1. **Avoid Overstating Statistical Claims**: Explicitly state that while RA achieves large operational reductions over RB (+1,050 min) and Slack (+1,014 min), route-clustered testing on $N=3$ test routes yields marginal unadjusted significance ($p \approx 0.01 - 0.08$) that does not survive Holm-Bonferroni correction ($p \approx 0.06 - 0.17$).
 2. **Report Label Construction Transparently**: Disclose that customer arrival times in the public Amazon Challenge are route-propagated proxies based on historical travel-time matrices.
 3. **Emphasize Actionability ($g_i$)**: Frame actionability as the indispensable spatial filter that prevents pure ML models from selecting futile moves.
 4. **Include Dataset Attribution & License**: Add formal citation of Merchán et al. (2021) and the CC BY-NC 4.0 license notice.

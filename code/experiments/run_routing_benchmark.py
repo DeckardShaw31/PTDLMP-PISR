@@ -15,7 +15,7 @@ from src.routing.schedule import propagate_schedule
 from src.routing.actionability import compute_actionability_scores, rank_candidates, select_intervention_set
 from src.routing.sfr import selective_forward_relocation
 from src.routing.validator import validate_route
-from src.evaluation.statistics import compute_paired_statistics
+from src.evaluation.statistics import compute_paired_statistics, compute_route_clustered_statistics
 from src.evaluation.tables import format_markdown_table, format_latex_table
 
 def run_benchmark_experiments():
@@ -51,8 +51,8 @@ def run_benchmark_experiments():
         "route_total_service_min"
     ]
 
-    print("[Benchmark] Training and calibrating RQ1 Risk Model on training dates...")
-    pipeline, rq1_metrics, _ = train_and_evaluate_pipeline(full_dataset, feature_cols, model_type="rf")
+    print("[Benchmark] Training and calibrating RQ1 Risk Model on training dates (model_type='logistic' selected via validation Brier/ECE)...")
+    pipeline, rq1_metrics, _ = train_and_evaluate_pipeline(full_dataset, feature_cols, model_type="logistic")
     print(f"[Benchmark] RQ1 Model trained. Test ROC-AUC = {rq1_metrics['roc_auc']:.3f}, Brier = {rq1_metrics['brier_score']:.4f}")
 
     # 2. Inject out-of-sample calibrated risks into all instances
@@ -68,7 +68,7 @@ def run_benchmark_experiments():
     budgets = [0.05, 0.10, 0.20, 0.30]
     deltas = [0.00, 0.02, 0.05, 0.10]
     policies = ["RA", "AB", "RB", "Slack", "Deadline", "Random"]
-    random_seeds = [42, 43, 44]  # 3 random seeds for empirical Random distribution
+    random_seeds = list(range(42, 52))  # Exactly 10 random seeds (42 to 51) for empirical Random distribution
 
     run_records = []
 
@@ -218,11 +218,17 @@ def run_benchmark_experiments():
     pivot_nl = df_nn.pivot(index=["route_id", "delta", "budget"], columns="policy", values="delta_nl").dropna()
 
     ra_tt = pivot_tt["RA"].values
-    paired_stats = {}
+    cell_paired_stats = {}
     for comp in ["AB", "RB", "Slack", "Deadline", "Random"]:
         comp_tt = pivot_tt[comp].values
         stats_dict = compute_paired_statistics(ra_tt, comp_tt)
-        paired_stats[comp] = stats_dict
+        cell_paired_stats[comp] = stats_dict
+
+    # Route-clustered statistics (avoids pseudo-replication across repeated cells)
+    route_clustered_stats = compute_route_clustered_statistics(
+        df_nn, target_metric="delta_tt", base_policy="RA",
+        comparison_policies=["AB", "RB", "Slack", "Deadline", "Random"]
+    )
 
     # 6. Aggregate summary by policy
     policy_summary = df_nn.groupby("policy").agg({
@@ -235,7 +241,7 @@ def run_benchmark_experiments():
     }).loc[["RA", "AB", "RB", "Slack", "Deadline", "Random"]].reset_index()
 
     print("\n" + "=" * 80)
-    print("EMPIRICAL ROUTING BENCHMARK RESULTS (HELD-OUT REALISTIC ROUTES)")
+    print("EMPIRICAL ROUTING BENCHMARK RESULTS (HELD-OUT AMAZON ROUTES)")
     print("=" * 80)
     summary_headers = ["Policy", "Avg Delta TT (min)", "Avg TT Red (%)", "Avg Delta NL", "Avg Dist Inc (%)", "Avg Relocations", "Feasibility Rate"]
     summary_rows = []
@@ -252,11 +258,11 @@ def run_benchmark_experiments():
     print(format_markdown_table(summary_headers, summary_rows))
 
     print("\n" + "=" * 80)
-    print("PAIRED STATISTICAL HYPOTHESIS TESTS (RA vs Competitors on Delta TT)")
+    print("CELL-LEVEL PAIRED STATISTICAL HYPOTHESIS TESTS (RA vs Competitors on Delta TT, N=48)")
     print("=" * 80)
     stat_headers = ["Comparison", "Mean Diff (min)", "95% Bootstrap CI", "Paired t-stat", "p-value (t-test)", "p-value (Wilcoxon)"]
     stat_rows = []
-    for comp, s in paired_stats.items():
+    for comp, s in cell_paired_stats.items():
         stat_rows.append([
             f"RA vs {comp}",
             f"{s['mean_diff']:+.3f} min",
@@ -266,6 +272,21 @@ def run_benchmark_experiments():
             f"{s['wilcoxon_pvalue']:.4f}"
         ])
     print(format_markdown_table(stat_headers, stat_rows))
+
+    print("\n" + "=" * 80)
+    print("ROUTE-CLUSTERED STATISTICAL TESTS WITH HOLM-BONFERRONI CORRECTION (N=3 independent routes)")
+    print("=" * 80)
+    rc_headers = ["Comparison", "Mean Diff (min)", "Route-Clustered t", "p (unadjusted)", "Holm-Bonferroni Adj p"]
+    rc_rows = []
+    for comp, s in route_clustered_stats.items():
+        rc_rows.append([
+            f"RA vs {comp}",
+            f"{s['mean_diff']:+.2f} min",
+            f"{s['t_stat']:.3f}",
+            f"{s['p_unadjusted']:.4f}",
+            f"{s['p_holm_bonferroni']:.4f}"
+        ])
+    print(format_markdown_table(rc_headers, rc_rows))
 
     # Invariants audit
     min_delta_tt = df_nn["delta_tt"].min()
@@ -306,8 +327,14 @@ def run_benchmark_experiments():
     print(format_markdown_table(cw_headers, cw_rows))
 
     summary_payload = {
+        "model_selection": {
+            "selected_model": "logistic",
+            "selection_criterion": "Validation Brier score, log loss, and ECE",
+            "test_metrics": rq1_metrics
+        },
         "policy_summary": policy_summary.to_dict(orient="records"),
-        "paired_statistics": paired_stats,
+        "cell_paired_statistics": cell_paired_stats,
+        "route_clustered_statistics": route_clustered_stats,
         "clarke_wright_summary": cw_summary.to_dict(orient="records"),
         "invariant_audit": {
             "min_delta_tt": float(min_delta_tt),
