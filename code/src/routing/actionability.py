@@ -113,13 +113,29 @@ def rank_candidates(
         rng.shuffle(shuffled)
         scored_candidates = [(c, float(len(shuffled) - idx)) for idx, c in enumerate(shuffled)]
 
-    elif policy.upper() in ["SLACK", "DEADLINE"]:
+    elif policy.upper() == "SLACK":
+        # True operational slack relative to baseline schedule:
+        # slack_i = tau_i - completion_i(R^0)
+        # Smallest (or most negative) slack gets highest intervention priority
+        base_sched = propagate_schedule(instance, baseline_route)
         for c in customers:
             stop = instance.stops[c]
-            # Earliest deadline gets highest score (negated timestamp)
+            comp_dt = base_sched.completion_times[c]
+            if stop.promised_time is not None:
+                slack_secs = (stop.promised_time - comp_dt).total_seconds()
+            else:
+                slack_secs = float('inf')
+            scored_candidates.append((c, -slack_secs))
+        scored_candidates.sort(key=lambda x: (-x[1], x[0]))
+        return scored_candidates
+
+    elif policy.upper() == "DEADLINE":
+        for c in customers:
+            stop = instance.stops[c]
             p_time = stop.promised_time.timestamp() if stop.promised_time else float('inf')
             scored_candidates.append((c, -p_time))
         scored_candidates.sort(key=lambda x: (-x[1], x[0]))
+        return scored_candidates
 
     else:
         raise ValueError(f"Unknown targeting policy: '{policy}'")

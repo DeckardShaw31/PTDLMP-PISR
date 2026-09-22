@@ -24,6 +24,12 @@ class RouteInstance:
     travel_times: Optional[Dict[Tuple[str, str], float]] = None
     # Directed distances in km: (from_stop, to_stop) -> km
     distances: Optional[Dict[Tuple[str, str], float]] = None
+    # Official metadata fields
+    route_date: Optional[str] = None
+    station_code: Optional[str] = None
+    executor_capacity_cm3: Optional[float] = None
+    route_score: Optional[str] = None
+    actual_sequence: Optional[Dict[str, int]] = None
 
 @dataclass
 class ScheduleResult:

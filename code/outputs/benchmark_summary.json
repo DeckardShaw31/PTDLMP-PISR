@@ -1,0 +1,152 @@
+{
+  "policy_summary": [
+    {
+      "policy": "RA",
+      "delta_tt": 21.41012152777778,
+      "tt_red_pct": 24.9968492012009,
+      "delta_nl": 0.23958333333333334,
+      "dist_inc_pct": -3.7253485208967034,
+      "accepted_moves": 1.1354166666666667,
+      "is_feasible": 1.0
+    },
+    {
+      "policy": "AB",
+      "delta_tt": 21.56526041666667,
+      "tt_red_pct": 25.060512030999433,
+      "delta_nl": 0.23958333333333334,
+      "dist_inc_pct": -3.7284414759007682,
+      "accepted_moves": 1.1666666666666667,
+      "is_feasible": 1.0
+    },
+    {
+      "policy": "RB",
+      "delta_tt": 10.811527777777778,
+      "tt_red_pct": 12.293168116969776,
+      "delta_nl": 0.020833333333333332,
+      "dist_inc_pct": -1.567742111151149,
+      "accepted_moves": 0.5416666666666666,
+      "is_feasible": 1.0
+    },
+    {
+      "policy": "Slack",
+      "delta_tt": 19.672048611111112,
+      "tt_red_pct": 24.093318451835017,
+      "delta_nl": 0.22916666666666666,
+      "dist_inc_pct": -3.0458111948693616,
+      "accepted_moves": 0.78125,
+      "is_feasible": 1.0
+    },
+    {
+      "policy": "Deadline",
+      "delta_tt": 12.00569444444445,
+      "tt_red_pct": 9.154452257829982,
+      "delta_nl": 0.0,
+      "dist_inc_pct": -0.6114254885125397,
+      "accepted_moves": 0.4375,
+      "is_feasible": 1.0
+    },
+    {
+      "policy": "Random",
+      "delta_tt": 6.374539930555557,
+      "tt_red_pct": 7.911485630923355,
+      "delta_nl": 0.04583333333333334,
+      "dist_inc_pct": -1.2022430072510788,
+      "accepted_moves": 0.4166666666666667,
+      "is_feasible": 1.0
+    }
+  ],
+  "paired_statistics": {
+    "AB": {
+      "n": 96,
+      "mean_diff": -0.15513888888888872,
+      "std_diff": 1.1429305378827475,
+      "ci_lower": -0.4125868055555548,
+      "ci_upper": 0.01979166666666643,
+      "t_stat": -1.3299534991656585,
+      "t_pvalue": 0.18671788100489475,
+      "wilcoxon_stat": 1.0,
+      "wilcoxon_pvalue": 0.5
+    },
+    "RB": {
+      "n": 96,
+      "mean_diff": 10.59859375,
+      "std_diff": 20.23658157591933,
+      "ci_lower": 6.909443576388888,
+      "ci_upper": 14.886602864583333,
+      "t_stat": 5.131528085641411,
+      "t_pvalue": 1.5195869832955579e-06,
+      "wilcoxon_stat": 0.0,
+      "wilcoxon_pvalue": 3.349549621723766e-10
+    },
+    "Slack": {
+      "n": 96,
+      "mean_diff": 1.7380729166666675,
+      "std_diff": 4.256833552129282,
+      "ci_lower": 0.9507634548611119,
+      "ci_upper": 2.620252170138888,
+      "t_stat": 4.000524549008671,
+      "t_pvalue": 0.0001251121237444098,
+      "wilcoxon_stat": 0.0,
+      "wilcoxon_pvalue": 3.4802619207736806e-06
+    },
+    "Deadline": {
+      "n": 96,
+      "mean_diff": 9.404427083333333,
+      "std_diff": 16.61553292306432,
+      "ci_lower": 6.375674045138888,
+      "ci_upper": 13.020468315972222,
+      "t_stat": 5.545665681393961,
+      "t_pvalue": 2.626466833218264e-07,
+      "wilcoxon_stat": 0.0,
+      "wilcoxon_pvalue": 1.5473443602549138e-09
+    },
+    "Random": {
+      "n": 96,
+      "mean_diff": 15.035581597222224,
+      "std_diff": 19.525990275371832,
+      "ci_lower": 11.42869279513889,
+      "ci_upper": 19.240543402777778,
+      "t_stat": 7.544713969386428,
+      "t_pvalue": 2.7084179062179623e-11,
+      "wilcoxon_stat": 0.0,
+      "wilcoxon_pvalue": 1.6163075390809416e-11
+    }
+  },
+  "clarke_wright_summary": [
+    {
+      "policy": "RA",
+      "delta_tt": 105.82722222222223,
+      "tt_red_pct": 52.26760824992604,
+      "delta_nl": 1.3333333333333333,
+      "dist_inc_pct": -1.9228513134230998
+    },
+    {
+      "policy": "AB",
+      "delta_tt": 107.64444444444445,
+      "tt_red_pct": 52.775116080604725,
+      "delta_nl": 1.6666666666666667,
+      "dist_inc_pct": -2.0255498554484332
+    },
+    {
+      "policy": "RB",
+      "delta_tt": 64.67277777777777,
+      "tt_red_pct": 31.76931968965196,
+      "delta_nl": 1.0,
+      "dist_inc_pct": 0.49408028976942225
+    },
+    {
+      "policy": "Slack",
+      "delta_tt": 105.14388888888887,
+      "tt_red_pct": 52.36052858116445,
+      "delta_nl": 1.5,
+      "dist_inc_pct": -1.9750598829085355
+    }
+  ],
+  "invariant_audit": {
+    "min_delta_tt": 0.0,
+    "negative_nl_occurrences": 32,
+    "zero_baseline_runs": 192,
+    "total_runs": 576,
+    "feasibility_rate": 1.0
+  }
+}

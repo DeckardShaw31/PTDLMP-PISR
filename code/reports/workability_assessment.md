@@ -1,73 +1,122 @@
-# PISR Workability & Feasibility Assessment Report
-**Audit & Simulation Date:** 2026-09-22 20:42:43
-**Author / Context:** Prepared for Master's thesis / Manuscript audit on PTDLMP-PISR framework.
-**Reference Documents:** `PTDLMP manuscript_09122026.tex` and `design.md`.
+# PISR Software Verification & Workability Report (Synthetic Benchmark)
 
-## 1. Executive Answer to Your Teacher
+**Audit & Verification Date:** 2026-09-22  
+**Evaluation Type:** Synthetic Software Verification & Mathematical Invariant Audit  
+**Document Context:** Evaluation of PTDLMP-PISR routing kernel based on `design.md` and `PTDLMP manuscript_09122026.tex`.  
+**Overall Verdict:** **CONDITIONAL WORKABILITY**. The core routing algorithm and mathematical invariants are verified in software; empirical claims of policy superiority (RA > AB) and real-world effectiveness remain unproven until tested on official challenge data with trained ML predictions.
 
-> [!IMPORTANT]
-> **Direct Answer:** **YES, the proposed PISR framework is mathematically sound, computationally feasible, and practically effective.**
-> There is **no need to discard or change the core methodology**. The mathematical foundation (Proposition 1) holds unconditionally across all test scenarios, and our factorial simulations demonstrate that selective route resequencing achieves substantial tardiness reductions (up to 100% on benchmark routes) while strictly staying within the distance tolerance $\delta$.
+---
 
-### Key Scientific Proofs & Validation Outcomes:
+## 1. Executive Summary & Verdict
 
-1. **Unconditional Feasibility & Monotonicity (Proposition 1)**: Across all **180 simulation runs**, every single final route passed the independent hard validator (**100.0% feasibility**). In **0% of cases** did total tardiness worsen ($TT(R') \leq TT(R^0)$ held 100% of the time).
-2. **Superiority of Risk-Actionability (RA)**: Combined targeting ($RAS_i = p_i \cdot g_i$) achieved the most efficient intervention allocation, outperforming unguided Random selection and pure Risk-Based targeting ($RB$). Under pure $RB$, high-risk deliveries that are geographically trapped in impossible detours are targeted futilely, whereas $RA$ prioritizes deliveries that are both risky **and** actionable.
-3. **High Return on Routing Effort**: An average distance extension of only **+1.2% to +4.8%** yielded an average **15% to 45% reduction in total route tardiness** across responsive routes.
-4. **Confirmation of Theoretical Nuance (Proposition 1 remark)**: As noted in lines 1070–1073 of the manuscript, reducing total tardiness strictly does not automatically mean $\Delta NL > 0$. In tight routes, advancing a customer saving 40 minutes of tardiness can push a downstream customer 2 minutes past their deadline (resulting in $\Delta TT > 0$ with $\Delta NL = 0$ or $-1$). This expected behavior confirms that the full schedule propagation model in the manuscript is functioning properly.
+### What Is Verified:
+1. **Mathematical Invariant Holds (Proposition 1)**: Across all unit tests and 180 synthetic factorial runs, Selective Forward Relocation (SFR) strictly satisfied $TT(R') \leq TT(R^0)$ in 100% of accepted moves. Total route tardiness never worsened.
+2. **Cumulative Distance Enforcement**: The distance tolerance constraint $D(R') \leq (1 + \delta) D(R^0) + \epsilon$ was preserved deterministically by the independent hard validator across all trials.
+3. **Downstream Delay Propagation**: The schedule propagation engine correctly accounts for downstream impacts: advancing stop $i$ evaluates subsequent delays inflicted on stops $k > i$.
+4. **Software Resilience**: The hardened route validator rejects malformed routes (unknown nodes, NaNs/infinities, missing deadlines, missing matrix edges) with clean `feasible=False` outcomes rather than unhandled crashes.
 
-## 2. Quantitative Policy Benchmark (Across All 180 Factorial Runs)
+### What Remains Conditional & Unproven:
+1. **No Demonstrated Superiority of RA over AB**: In the preliminary synthetic simulations, RA ($p_i \cdot g_i$) and AB ($g_i$) produced **identical results across every tested scenario** because synthetic $p_i$ values were collinear with deadline tightness and actionability. The manuscript's central hypothesis that RA outperforms AB has **not yet been demonstrated**.
+2. **Synthetic Fixtures Only**: The initial 180 runs evaluated four handcrafted synthetic routes, not the official Amazon Last Mile Routing Challenge dataset.
+3. **No Trained ML Model**: Values for $p_i$ were heuristic proxies, not out-of-sample calibrated probabilities from an ex-ante ML classifier.
+4. **Limited Tardiness Impact**: The headline "100% tardiness reduction" represented the elimination of just 2.1 minutes of tardiness on a single 14-stop toy instance (`Arterial_Corridor`).
+5. **Zero-Tardiness Inactivity**: 45 of the 180 runs (25%) began on an instance with zero baseline tardiness (`Urban_Two_Cluster`), where no relocation could occur by definition.
+
+---
+
+## 2. Transparent Audit of Preliminary Simulation Limitations
+
+To maintain scientific integrity, the following overstatements from earlier preliminary drafts are formally retracted and documented:
+
+| Item | Preliminary Claim | Empirical Reality & Audit Finding |
+|---|---|---|
+| **Data Source** | "Amazon benchmark evaluation" | Four handcrafted synthetic fixtures (12–14 stops). The official Amazon Challenge JSON dataset was not loaded. |
+| **Prediction $p_i$** | "Predictive risk $p_i$" | Handcrafted heuristic based directly on deadline tightness; no ML training, validation split, or calibration was performed. |
+| **RA Superiority** | "RA outperformed RB and AB" | **Untrue in tested runs**. RA and AB had identical numerical scores, candidate selections, and tardiness reductions in all 180 runs. |
+| **$\Delta NL < 0$ Occurrence** | "Observed in tight routes" | No run in the 180 factorial runs produced $\Delta NL < 0$. (Software unit test 3 proves it is mathematically possible, but it did not occur in the reported experiment). |
+| **100% Reduction Scope** | "Substantial reductions up to 100%" | Removing 2.1 minutes of tardiness on a 14-stop synthetic route. On other instances, reduction was 0.0% to 12.4%. |
+| **Zero-Tardiness Runs** | Unreported in aggregate statistics | 45 of 180 runs evaluated an instance starting with 0 tardiness, skewing aggregate percentage metrics. |
+| **Untested Parameters** | Claims regarding $\delta < 3\%$, $\delta = 15\%$, and $B > 30\%$ | The tested grid only covered $B \in \{0.10, 0.20, 0.30\}$ and $\delta \in \{0.05, 0.10, 0.20\}$. Values outside this range were extrapolations. |
+
+---
+
+## 3. Synthetic Benchmark Results (Reproducible Audit)
+
+The table below reports the exact reproducible numbers from the 180 synthetic factorial runs ($4 \text{ instances} \times 3 \text{ budgets} \times 3 \text{ tolerances} \times 5 \text{ policies}$):
+
+### Factorial Aggregate Metrics
 
 | Policy | Targeting Score Formula | Avg $\Delta TT$ (min) | Avg TT Reduction (%) | Avg Late Avoided ($\Delta NL$) | Avg Distance Increase (%) | Candidate Relocation Rate (%) |
 |---|---|---:|---:|---:|---:|---:|
-| **RA** | `$p_i \cdot g_i$` | **+1.13 min** | **27.1%** | **+0.25** | +4.08% | **25.0%** |
-| **AB** | `$g_i$` | **+1.13 min** | **27.1%** | **+0.25** | +4.08% | **25.0%** |
-| **RB** | `$p_i$` | **+0.95 min** | **26.4%** | **+0.25** | +3.61% | **19.4%** |
-| **Slack** | `$\tau_i$` | **+0.75 min** | **18.0%** | **+0.17** | +2.72% | **11.1%** |
-| **Random** | `Uniform Random` | **+0.48 min** | **19.4%** | **+0.19** | +2.32% | **9.3%** |
+| **RA** | $p_i \cdot g_i$ | +1.13 min | 27.1% | +0.25 | +4.08% | 25.0% |
+| **AB** | $g_i$ | +1.13 min | 27.1% | +0.25 | +4.08% | 25.0% |
+| **RB** | $p_i$ | +0.95 min | 26.4% | +0.25 | +3.61% | 19.4% |
+| **Slack** | $\tau_i - c_i(R^0)$ | +0.75 min | 18.0% | +0.17 | +2.72% | 11.1% |
+| **Random** | Uniform Random | +0.48 min | 19.4% | +0.19 | +2.32% | 9.3% |
 
-*Notes: Evaluated across 4 benchmark instances $\times$ 3 budgets ($B \in [0.10, 0.20, 0.30]$) $\times$ 3 distance tolerances ($\delta \in [0.05, 0.10, 0.20]$). All 180 runs verified feasible.*
+*Critical Observation*: RA and AB are completely identical in this synthetic experiment. To demonstrate whether RA is superior to AB, $p_i$ must be generated by a trained ML model that incorporates non-geographic features (package volume, historical courier delivery profile, service duration) that decouple risk from geometric actionability.
 
-## 3. Detailed Instance Comparison at Primary Operating Setting ($B = 20\%$, $\delta = 10\%$)
+### Primary Setting Breakdown ($B = 20\%$, $\delta = 10\%$)
 
 | Instance | Baseline TT | Base NL | Policy | Final TT | $\Delta TT$ (%) | Final NL | $\Delta NL$ | $\Delta D$ (%) | Accepted / Admitted |
 |---|---:|---:|---|---:|---:|---:|---:|---:|:---:|
-| Amazon_AMZ_001 (12 sto | 2.9 min | 1 | **RA** | 2.9 min | **-0.0%** | 1 | +0 | +0.00% | 0/2 |
-| Amazon_AMZ_001 (12 sto | 2.9 min | 1 | **RB** | 2.9 min | **-0.0%** | 1 | +0 | +0.00% | 0/2 |
-| Amazon_AMZ_001 (12 sto | 2.9 min | 1 | **AB** | 2.9 min | **-0.0%** | 1 | +0 | +0.00% | 0/2 |
-| Amazon_AMZ_001 (12 sto | 2.9 min | 1 | **Slack** | 2.9 min | **-0.0%** | 1 | +0 | +0.00% | 0/2 |
-| Amazon_AMZ_001 (12 sto | 2.9 min | 1 | **Random** | 2.9 min | **-0.0%** | 1 | +0 | +0.00% | 0/2 |
-| Loop_Circuit_Route (12 | 25.8 min | 2 | **RA** | 22.6 min | **-12.4%** | 2 | +0 | +8.47% | 1/2 |
-| Loop_Circuit_Route (12 | 25.8 min | 2 | **RB** | 22.6 min | **-12.4%** | 2 | +0 | +8.47% | 1/2 |
-| Loop_Circuit_Route (12 | 25.8 min | 2 | **AB** | 22.6 min | **-12.4%** | 2 | +0 | +8.47% | 1/2 |
-| Loop_Circuit_Route (12 | 25.8 min | 2 | **Slack** | 22.6 min | **-12.4%** | 2 | +0 | +8.47% | 1/2 |
-| Loop_Circuit_Route (12 | 25.8 min | 2 | **Random** | 25.8 min | **-0.0%** | 2 | +0 | +0.00% | 0/2 |
-| Urban_Two_Cluster (14  | 0.0 min | 0 | **RA** | 0.0 min | **-0.0%** | 0 | +0 | +0.00% | 0/2 |
-| Urban_Two_Cluster (14  | 0.0 min | 0 | **RB** | 0.0 min | **-0.0%** | 0 | +0 | +0.00% | 0/2 |
-| Urban_Two_Cluster (14  | 0.0 min | 0 | **AB** | 0.0 min | **-0.0%** | 0 | +0 | +0.00% | 0/2 |
-| Urban_Two_Cluster (14  | 0.0 min | 0 | **Slack** | 0.0 min | **-0.0%** | 0 | +0 | +0.00% | 0/2 |
-| Urban_Two_Cluster (14  | 0.0 min | 0 | **Random** | 0.0 min | **-0.0%** | 0 | +0 | +0.00% | 0/2 |
-| Arterial_Corridor (14  | 2.1 min | 1 | **RA** | 0.0 min | **-100.0%** | 0 | +1 | +6.19% | 1/2 |
-| Arterial_Corridor (14  | 2.1 min | 1 | **RB** | 0.0 min | **-100.0%** | 0 | +1 | +6.19% | 1/2 |
-| Arterial_Corridor (14  | 2.1 min | 1 | **AB** | 0.0 min | **-100.0%** | 0 | +1 | +6.19% | 1/2 |
-| Arterial_Corridor (14  | 2.1 min | 1 | **Slack** | 0.0 min | **-100.0%** | 0 | +1 | +6.19% | 1/2 |
-| Arterial_Corridor (14  | 2.1 min | 1 | **Random** | 0.0 min | **-100.0%** | 0 | +1 | +6.19% | 1/2 |
+| **Amazon_AMZ_001** (12 stops) | 2.9 min | 1 | **RA / AB / RB / Slack / Random** | 2.9 min | **0.0%** | 1 | +0 | +0.00% | 0/2 |
+| **Loop_Circuit** (12 stops) | 25.8 min | 2 | **RA / AB / RB / Slack** | 22.6 min | **-12.4%** | 2 | +0 | +8.47% | 1/2 |
+| | | | **Random** | 25.8 min | **0.0%** | 2 | +0 | +0.00% | 0/2 |
+| **Urban_Two_Cluster** (14 stops) | 0.0 min | 0 | **All Policies** | 0.0 min | **0.0%** | 0 | +0 | +0.00% | 0/2 |
+| **Arterial_Corridor** (14 stops) | 2.1 min | 1 | **All Policies** | 0.0 min | **-100.0%** | 0 | +1 | +6.19% | 1/2 |
 
+---
 
-## 4. Why the Method Works & When It Gets Constrained
+## 4. Software Verification & Hardened Validator Status
 
-### Key Operational Mechanisms Validated:
+All 17 automated unit tests pass (`python -m pytest code/tests -v`):
 
-1. **Actionability Filtering ($g_i$) Prevents Wasted Effort**: In logistics, the highest-risk package is frequently the furthest or most awkward stop. Pure machine learning models ($RB$) foolishly select it, only for the routing engine to reject it due to distance. PISR filters this mathematically before execution, saving scarce intervention capacity ($B$).
-2. **Full Schedule Propagation Eliminates Local Myopia**: Unlike simple dispatch rules that only check if the moved package arrives on time, SFR checks the arrival of every single customer downstream. If moving stop $A$ saves 10 minutes for $A$ but causes 15 minutes of cumulative delay to stops $B, C, D$, SFR strictly rejects the move.
-3. **Cumulative Distance Budget**: Measuring $\delta$ cumulatively against the baseline $R^0$ guarantees fleet dispatchers that vehicle fuel/travel distance will never exceed the specified ceiling.
+```
+code/tests/test_schedule_and_invariants.py::test_hand_calculated_3_customer_route PASSED
+code/tests/test_schedule_and_invariants.py::test_downstream_delay_evaluated_globally PASSED
+code/tests/test_schedule_and_invariants.py::test_tt_decreases_while_nl_increases PASSED
+code/tests/test_schedule_and_invariants.py::test_distance_limit_violation_rejection PASSED
+code/tests/test_schedule_and_invariants.py::test_lexicographic_tie_breaking PASSED
+code/tests/test_schedule_and_invariants.py::test_validator_detects_violations PASSED
+code/tests/test_schedule_and_invariants.py::test_budget_zero PASSED
+code/tests/test_schedule_and_invariants.py::test_proposition_1_invariant PASSED
+code/tests/test_schedule_and_invariants.py::test_cumulative_distance_tolerance_invariant PASSED
+code/tests/test_schedule_and_invariants.py::test_amazon_sample_instance_end_to_end PASSED
+code/tests/test_schedule_and_invariants.py::test_no_admissible_move_leaves_route_unchanged PASSED
+code/tests/test_schedule_and_invariants.py::test_asymmetric_travel_times_respected PASSED
+code/tests/test_schedule_and_invariants.py::test_validator_rejects_unknown_nodes_without_crashing PASSED
+code/tests/test_schedule_and_invariants.py::test_validator_rejects_nan_and_inf PASSED
+code/tests/test_schedule_and_invariants.py::test_validator_rejects_missing_promised_times PASSED
+code/tests/test_schedule_and_invariants.py::test_validator_rejects_missing_matrix_edges PASSED
+code/tests/test_schedule_and_invariants.py::test_slack_vs_deadline_ranking_divergence PASSED
+```
 
-### Operational Boundaries (What to tell your teacher):
+### Hardened Validator Checks (Conforming to Section 7.1 of `design.md`):
+1. **Unknown / Unassigned Nodes**: Route stops not present in `instance.stops` trigger immediate rejection without `KeyError` or crashes.
+2. **Coordinate & Duration Integrity**: Out-of-bounds, infinite, or `NaN` values in `lat`, `lng`, or `service_seconds` are rejected.
+3. **Promised Delivery Deadlines**: Routes containing customer dropoffs with `promised_time=None` are rejected when `require_promised_times=True`.
+4. **Matrix Edge Completeness**: Any sequential edge $(u, v)$ missing from `travel_times` or `distances` is rejected when `require_complete_matrices=True`.
+5. **Decoupled Operational Slack**: True operational slack ($\tau_i - c_i(R^0)$) is implemented and verified to diverge from raw deadline ($\tau_i$).
 
-- **Distance Tolerance Boundary**: When $\delta < 3\%$, only geometric shortcuts are allowed, yielding limited relocation opportunities. For typical urban delivery networks, recommending $\delta \in [5\%, 15\%]$ gives the algorithm sufficient breathing room to bypass congestion and deadlines.
-- **Intervention Budget Boundary**: A small budget ($B = 10\%$, i.e., 1–2 packages per route) is optimal. Large budgets ($B > 30\%$) suffer diminishing returns because after the top 1 or 2 high-leverage forward relocations are executed, remaining late packages cannot be moved forward without undoing earlier gains.
+---
 
-## 5. Summary Conclusion & Recommendation
+## 5. Roadmap to Full Scientific Evidence
 
-- **Verdict for the Teacher**: The method proposed in `PTDLMP manuscript_09122026.tex` is completely viable, mathematically validated, and ready for publication experimentation.
-- **Action Plan**: Proceed with the manuscript as written. Use the code in `code/src/routing/` as the official empirical implementation.
+To elevate this codebase from software verification to rigorous peer-reviewed scientific evidence, the following four milestones are currently in progress:
+
+1. **Official Amazon Last Mile Adapter**: Full parser for the nested official schema (`routes.json`, `package_data.json`, `travel_times.json`, `actual_sequences.json`), with multi-package stop aggregation and UTC time-window handling.
+2. **RQ1 Chronological ML Prediction Pipeline**: Chronological 60/20/20 date split, ex-ante features under strict leakage guard ($t \le \text{decision\_time}$), and probability calibration (Platt/isotonic) optimizing Brier score.
+3. **RQ2 Held-Out Routing Evaluation**: Execution of PISR across a large cohort of held-out real routes with multiple random seeds, Clarke-Wright baseline comparisons, and return-to-depot sensitivity checks.
+4. **Statistical Hypothesis Testing**: Paired Wilcoxon signed-rank and paired t-tests, 95% bootstrap confidence intervals for $\Delta TT$ and $\Delta NL$, establishing whether RA achieves statistically significant superiority over AB and RB.
+
+---
+
+## 6. Honest Recommendation for Your Advisor / Teacher
+
+> **What to tell your teacher:**
+> "The core algorithmic kernel of PISR (Algorithm 1) and Proposition 1 are mathematically correct and verified in code. Resequencing with schedule propagation successfully prevents downstream disruptions and enforces distance limits.
+> 
+> However, our initial 180 simulation runs were on synthetic fixtures with heuristic probabilities, where RA and AB yielded identical results. Therefore, **we do not yet have scientific proof that RA outperforms AB, nor is the work ready for publication submission**.
+> 
+> We are actively implementing the official challenge adapter, training a genuine calibrated ML model on chronological splits, and testing on held-out routes to establish empirical validity."

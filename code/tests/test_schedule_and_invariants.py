@@ -468,3 +468,132 @@ def test_asymmetric_travel_times_respected():
     sched2 = propagate_schedule(inst, ["DEPOT", "C2", "C1"])
     assert (sched2.arrival_times["C1"] - dt(8, 0)).total_seconds() == 1000.0
 
+# ----------------------------------------------------------------------
+# Test 13: Validator rejects unknown nodes without unhandled exception
+# ----------------------------------------------------------------------
+def test_validator_rejects_unknown_nodes_without_crashing():
+    depot = Stop(stop_id="DEPOT", lat=0.0, lng=0.0, stop_type="Station")
+    c1 = Stop(stop_id="C1", lat=0.01, lng=0.0, stop_type="Dropoff", promised_time=dt(9, 0), service_seconds=100)
+    inst = RouteInstance(
+        route_id="TEST_UNKNOWN",
+        depot_id="DEPOT",
+        departure_time=dt(8, 0),
+        stops={"DEPOT": depot, "C1": c1}
+    )
+
+    # Route contains completely unknown node "GHOST_NODE"
+    cand_route = ["DEPOT", "C1", "GHOST_NODE"]
+    # Must NOT raise KeyError or unhandled exception
+    res = validate_route(inst, cand_route)
+    assert res.feasible is False
+    assert any("Unknown or unassigned" in v for v in res.violations)
+    assert "GHOST_NODE" in str(res.violations)
+
+# ----------------------------------------------------------------------
+# Test 14: Validator rejects NaN and Inf coordinates and service times
+# ----------------------------------------------------------------------
+def test_validator_rejects_nan_and_inf():
+    import math
+    depot = Stop(stop_id="DEPOT", lat=0.0, lng=0.0, stop_type="Station")
+    c1 = Stop(stop_id="C1", lat=float('nan'), lng=0.0, stop_type="Dropoff", promised_time=dt(9, 0), service_seconds=100)
+    inst_nan = RouteInstance(
+        route_id="TEST_NAN",
+        depot_id="DEPOT",
+        departure_time=dt(8, 0),
+        stops={"DEPOT": depot, "C1": c1}
+    )
+    res_nan = validate_route(inst_nan, ["DEPOT", "C1"])
+    assert res_nan.feasible is False
+    assert any("NaN or Inf coordinates" in v for v in res_nan.violations)
+
+    c2 = Stop(stop_id="C2", lat=0.01, lng=0.0, stop_type="Dropoff", promised_time=dt(9, 0), service_seconds=float('inf'))
+    inst_inf = RouteInstance(
+        route_id="TEST_INF",
+        depot_id="DEPOT",
+        departure_time=dt(8, 0),
+        stops={"DEPOT": depot, "C2": c2}
+    )
+    res_inf = validate_route(inst_inf, ["DEPOT", "C2"])
+    assert res_inf.feasible is False
+    assert any("NaN or Inf service duration" in v for v in res_inf.violations)
+
+# ----------------------------------------------------------------------
+# Test 15: Validator rejects missing promised delivery times
+# ----------------------------------------------------------------------
+def test_validator_rejects_missing_promised_times():
+    depot = Stop(stop_id="DEPOT", lat=0.0, lng=0.0, stop_type="Station")
+    c1 = Stop(stop_id="C1", lat=0.01, lng=0.0, stop_type="Dropoff", promised_time=None, service_seconds=100)
+    inst = RouteInstance(
+        route_id="TEST_NO_DEADLINE",
+        depot_id="DEPOT",
+        departure_time=dt(8, 0),
+        stops={"DEPOT": depot, "C1": c1}
+    )
+    res = validate_route(inst, ["DEPOT", "C1"], require_promised_times=True)
+    assert res.feasible is False
+    assert any("missing promised delivery time" in v for v in res.violations)
+
+# ----------------------------------------------------------------------
+# Test 16: Validator rejects missing travel matrix edges
+# ----------------------------------------------------------------------
+def test_validator_rejects_missing_matrix_edges():
+    depot = Stop(stop_id="DEPOT", lat=0.0, lng=0.0, stop_type="Station")
+    c1 = Stop(stop_id="C1", lat=0.01, lng=0.0, stop_type="Dropoff", promised_time=dt(9, 0), service_seconds=100)
+    c2 = Stop(stop_id="C2", lat=0.02, lng=0.0, stop_type="Dropoff", promised_time=dt(9, 0), service_seconds=100)
+    
+    # Missing the edge ("C1", "C2")
+    travel_times: Dict[Tuple[str, str], float] = {
+        ("DEPOT", "C1"): 100.0,
+        ("DEPOT", "C2"): 150.0
+    }
+    inst = RouteInstance(
+        route_id="TEST_MISSING_EDGE",
+        depot_id="DEPOT",
+        departure_time=dt(8, 0),
+        stops={"DEPOT": depot, "C1": c1, "C2": c2},
+        travel_times=travel_times
+    )
+    res = validate_route(inst, ["DEPOT", "C1", "C2"], require_complete_matrices=True)
+    assert res.feasible is False
+    assert any("Missing directed travel-time edge: (C1, C2)" in v for v in res.violations)
+
+# ----------------------------------------------------------------------
+# Test 17: Slack vs Deadline ranking divergence
+# ----------------------------------------------------------------------
+def test_slack_vs_deadline_ranking_divergence():
+    """
+    Demonstrates that operational slack (tau_i - c_i(R0)) decouples from
+    raw deadline (tau_i) when cumulative service and travel times differ.
+    C1: promised 08:30, completion 08:25 -> Slack = +5 min (least urgent)
+    C2: promised 08:35, completion 08:45 -> Slack = -10 min (most urgent, tardy!)
+    Deadline policy ranks C1 first (08:30 < 08:35).
+    Slack policy ranks C2 first (-10 min slack < +5 min slack).
+    """
+    depot = Stop(stop_id="DEPOT", lat=0.0, lng=0.0, stop_type="Station")
+    c1 = Stop(stop_id="C1", lat=0.01, lng=0.0, stop_type="Dropoff", promised_time=dt(8, 30), service_seconds=300)
+    c2 = Stop(stop_id="C2", lat=0.02, lng=0.0, stop_type="Dropoff", promised_time=dt(8, 35), service_seconds=300)
+
+    travel_times: Dict[Tuple[str, str], float] = {
+        ("DEPOT", "C1"): 1200.0,  # 20 min -> arrive 08:20, complete 08:25 <= 08:30 (Slack = +5 min)
+        ("C1", "C2"): 900.0       # 15 min -> arrive 08:40, complete 08:45 > 08:35 (Slack = -10 min)
+    }
+    inst = RouteInstance(
+        route_id="TEST_SLACK_DIFF",
+        depot_id="DEPOT",
+        departure_time=dt(8, 0),
+        stops={"DEPOT": depot, "C1": c1, "C2": c2},
+        travel_times=travel_times
+    )
+
+    baseline = ["DEPOT", "C1", "C2"]
+    g_scores = {"C1": 0.0, "C2": 10.0}
+
+    # Deadline ranking: earliest promised time first -> C1 (08:30) before C2 (08:35)
+    deadline_ranked = rank_candidates(inst, baseline, policy="DEADLINE", g_scores=g_scores)
+    assert [c[0] for c in deadline_ranked] == ["C1", "C2"]
+
+    # Slack ranking: smallest/most negative slack first -> C2 (-600s) before C1 (+300s)
+    slack_ranked = rank_candidates(inst, baseline, policy="SLACK", g_scores=g_scores)
+    assert [c[0] for c in slack_ranked] == ["C2", "C1"]
+
+
