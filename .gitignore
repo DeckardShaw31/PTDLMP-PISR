@@ -32,7 +32,8 @@ ENV/
 htmlcov/
 .hypothesis/
 
-# LaTeX build artifacts
+# LaTeX source and build artifacts
+*.tex
 *.aux
 *.bbl
 *.blg
