@@ -13,7 +13,7 @@
 
 ## Executive Summary & Scientific Verdict
 
-This report presents an empirical evaluation of the **Prediction-Informed Selective Route Resequencing (PISR)** framework executed on a 13-route representative cohort from the **Amazon Last Mile Routing Research Challenge dataset** (AWS Open Data, licensed under CC BY-NC 4.0). Adhering to strict chronological splitting, feature leakage guards, and route-clustered statistical testing:
+This report presents an empirical evaluation of the **Prediction-Informed Selective Route Resequencing (PISR)** framework executed on a 13-route exploratory convenience cohort from the **Amazon Last Mile Routing Research Challenge dataset** (AWS Open Data, licensed under CC BY-NC 4.0). Adhering to strict chronological splitting, feature leakage guards, and route-clustered statistical testing:
 
 1. **RQ1 (Predictability of Promised Delivery Lateness Proxy)**:
    - Evaluated on **2,038 drop-off delivery stops** (2,051 total stops including depots) across 12 calendar dates from **7 station codes** (`DBO2`, `DCH4`, `DLA7`, `DLA8`, `DLA9`, `DSE4`, `DSE5`).
@@ -23,14 +23,15 @@ This report presents an empirical evaluation of the **Prediction-Informed Select
    - Evaluated across **288 factorial runs** on 3 held-out test routes (`DBO2`, `DSE4`, and `DSE5`) spanning budgets $B \in \{5\%, 10\%, 20\%, 30\%\}$ and distance tolerances $\delta \in \{0\%, 2\%, 5\%, 10\%\}$. The Random baseline is evaluated across 10 distinct random seeds (seeds 42 to 51) per parameter cell.
    - **Proposition 1 Monotonicity**: Verified in 100% of runs ($\min \Delta TT \geq 0.0000$ min, exactly 0 violations). Resequencing never degraded route performance.
    - **Hard Feasibility**: 100% of final routes passed the independent validator (no subtours, no duplicated/dropped customers, depot departure preserved).
-3. **Core Hypothesis Resolution & Statistical Inference**:
-   - **Cell-Level vs. Route-Clustered Tests**: Cell-level tests ($N=48$ cells) yield nominal $p < 0.0001$ for comparisons against heuristics. However, treating repeated $(B, \delta)$ cells as independent introduces pseudo-replication. When clustering at the route level ($N=3$ independent held-out routes):
-     - **RA vs. RB (Pure Risk)**: Mean diff = **+1,050.28 min**, unadjusted $p = 0.0126$, Holm-Bonferroni adjusted $p = 0.0631$. Pure risk targeting selects stops that are geographically inaccessible, squandering limited relocation capacity.
-     - **RA vs. Slack**: Mean diff = **+1,014.41 min**, unadjusted $p = 0.0877$, Holm-Bonferroni adjusted $p = 0.1754$.
-     - **RA vs. Deadline**: Mean diff = **+1,145.87 min**, unadjusted $p = 0.0210$, Holm-Bonferroni adjusted $p = 0.0839$.
-     - **RA vs. Random**: Mean diff = **+1,118.42 min**, unadjusted $p = 0.0248$, Holm-Bonferroni adjusted $p = 0.0839$.
-     - **RA vs. AB (Pure Actionability)**: Mean diff = **-16.62 min**, unadjusted $p = 0.4825$, Holm-Bonferroni adjusted $p = 0.4825$.
-   - **Multiple Testing Correction**: Under Holm-Bonferroni correction across the 5 policy comparisons, none of the differences reach formal significance at $\alpha = 0.05$ (adjusted $p \in [0.0631, 0.4825]$) due to the limited degrees of freedom ($N=3$ routes). While the directional effect sizes are substantial (>1,000 minutes saved), establishing formal statistical significance under route clustering requires expanding the held-out sample to $N \ge 20$ independent routes.
+3. **Core Hypothesis Resolution & Defensible Statistical Verdict**:
+   - **Defensible Conclusion**: RA shows large operational improvements over risk-only and conventional targeting (averaging >1,000 minutes of saved tardiness), but none of the route-clustered comparisons remain statistically significant after Holm–Bonferroni correction because only three independent test routes are available ($N=3$).
+   - **Route-Clustered Statistical Inference ($N=3$)**:
+     - **RA vs. RB (Pure Risk)**: Mean diff = **+1,050.28 min**, route-level 95% bootstrap CI = **[+830.29, +1,239.51] min**, unadjusted $p = 0.0126$, Holm-Bonferroni adjusted $p = 0.0631$. Pure risk targeting selects stops that are geographically inaccessible, squandering limited relocation capacity.
+     - **RA vs. Slack**: Mean diff = **+1,014.41 min**, route-level 95% bootstrap CI = **[+394.52, +1,475.30] min**, unadjusted $p = 0.0877$, Holm-Bonferroni adjusted $p = 0.1754$.
+     - **RA vs. Deadline**: Mean diff = **+1,145.87 min**, route-level 95% bootstrap CI = **[+834.88, +1,414.37] min**, unadjusted $p = 0.0210$, Holm-Bonferroni adjusted $p = 0.0839$.
+     - **RA vs. Random**: Mean diff = **+1,118.42 min**, route-level 95% bootstrap CI = **[+759.68, +1,299.85] min**, unadjusted $p = 0.0248$, Holm-Bonferroni adjusted $p = 0.0839$.
+     - **RA vs. AB (Pure Actionability)**: Mean diff = **-16.62 min**, route-level 95% bootstrap CI = **[-55.48, +3.95] min**, unadjusted $p = 0.4825$, Holm-Bonferroni adjusted $p = 0.4825$.
+   - **Sample Size & Prospective Power**: Establishing formal statistical confirmation under route clustering requires expanding the held-out route sample based on a formal prospective power analysis.
    - **Scientific Insight**: Actionability score $g_i$ captures virtually all single-vehicle schedule headroom. Weighting by predicted risk ($p_i \cdot g_i$) provides a sensible tie-breaker without degrading performance, but does not yield a statistically significant advantage over pure $g_i$ alone in this single-vehicle setting.
 
 ---
@@ -96,17 +97,17 @@ This report presents an empirical evaluation of the **Prediction-Informed Select
 
 $$\Delta TT(\text{RA}) - \Delta TT(\text{Competitor})$$
 
-| Comparison | Mean Diff (min) | 95% Bootstrap CI | Cell-Level $p$ ($N=48$) | Route-Clustered $t$ ($N=3$) | Route-Clustered $p$ (unadjusted) | Holm-Bonferroni Adj. $p$ | Significant at $\alpha=0.05$? |
-|---|---:|:---:|---:|---:|---:|---:|:---:|
-| **RA vs. AB** | **-16.62 min** | [-49.92, +18.20] | 0.3626 | -0.855 | 0.4825 | 0.4825 | **NO** |
-| **RA vs. RB** | **+1,050.28 min** | [+932.39, +1179.75] | < 0.0001 | +8.816 | 0.0126 | 0.0631 | **Marginal** (unadjusted) |
-| **RA vs. Slack** | **+1,014.41 min** | [+846.26, +1179.74] | < 0.0001 | +3.151 | 0.0877 | 0.1754 | **NO** |
-| **RA vs. Deadline** | **+1,145.87 min** | [+1020.43, +1264.07] | < 0.0001 | +6.795 | 0.0210 | 0.0839 | **Marginal** (unadjusted) |
-| **RA vs. Random** | **+1,118.42 min** | [+987.39, +1253.40] | < 0.0001 | +6.235 | 0.0248 | 0.0839 | **Marginal** (unadjusted) |
+| Comparison | Mean Diff (min) | Route-Level 95% Bootstrap CI | Cell-Level 95% Bootstrap CI | Route-Clustered $t$ ($N=3$) | Route-Clustered $p$ (unadjusted) | Holm-Bonferroni Adj. $p$ | Significant at $\alpha=0.05$? |
+|---|---:|:---:|:---:|---:|---:|---:|:---:|
+| **RA vs. AB** | **-16.62 min** | [-55.48, +3.95] | [-49.92, +18.20] | -0.855 | 0.4825 | 0.4825 | **NO** |
+| **RA vs. RB** | **+1,050.28 min** | [+830.29, +1,239.51] | [+932.39, +1,179.75] | +8.816 | 0.0126 | 0.0631 | **Marginal** (unadjusted) |
+| **RA vs. Slack** | **+1,014.41 min** | [+394.52, +1,475.30] | [+846.26, +1,179.74] | +3.151 | 0.0877 | 0.1754 | **NO** |
+| **RA vs. Deadline** | **+1,145.87 min** | [+834.88, +1,414.37] | [+1,020.43, +1,264.07] | +6.795 | 0.0210 | 0.0839 | **Marginal** (unadjusted) |
+| **RA vs. Random** | **+1,118.42 min** | [+759.68, +1,299.85] | [+987.39, +1,253.40] | +6.235 | 0.0248 | 0.0839 | **Marginal** (unadjusted) |
 
 ### Key Methodological Takeaways:
 1. **Dangers of Pseudo-Replication**: Cell-level pooling treats repeated runs on the same route as independent, artificially inflating statistical power ($p < 0.0001$). Route clustering correctly identifies the independent experimental unit ($N=3$), reflecting the true sampling uncertainty.
-2. **Substantive vs. Statistical Significance**: Although the magnitude of tardiness reduction for RA over RB (+1,050 min) and Deadline (+1,146 min) is operationally dramatic, statistical confirmation after family-wise error rate control requires expanding the route sample ($N \ge 20$).
+2. **Substantive vs. Statistical Significance**: Although the magnitude of tardiness reduction for RA over RB (+1,050 min) and Deadline (+1,146 min) is operationally dramatic, statistical confirmation after family-wise error rate control requires expanding the held-out route sample based on a formal prospective power analysis.
 3. **Equivalence of RA and AB**: Both at the cell level ($p = 0.3626$) and route-clustered level ($p = 0.4825$), RA and AB are statistically indistinguishable. Actionability $g_i$ carries the primary optimization signal.
 
 ---

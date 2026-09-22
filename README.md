@@ -124,7 +124,7 @@ This generates `routing_benchmark_runs.csv`, `robustness_clark_wright_runs.csv`,
 
 ---
 
-## 📊 Summary of Empirical Results (Amazon Challenge Cohort)
+## 📊 Summary of Empirical Results (Amazon Challenge Exploratory Cohort)
 
 ### Policy Comparison (Held-out Routes, 288 Factorial Runs)
 
@@ -141,15 +141,15 @@ This generates `routing_benchmark_runs.csv`, `robustness_clark_wright_runs.csv`,
 
 $$\Delta TT(\text{RA}) - \Delta TT(\text{Competitor})$$
 
-| Comparison | Mean Diff (min) | Cell-Level $p$ ($N=48$) | Route-Clustered $p$ ($N=3$) | Holm-Bonferroni Adj. $p$ |
-|---|---:|---:|---:|---:|
-| **RA vs. AB** | **-16.62 min** | $0.3626$ | $0.4825$ | $0.4825$ |
-| **RA vs. RB** | **+1,050.28 min** | $< 0.0001$ | $0.0126$ | $0.0631$ |
-| **RA vs. Slack** | **+1,014.41 min** | $< 0.0001$ | $0.0877$ | $0.1754$ |
-| **RA vs. Deadline** | **+1,145.87 min** | $< 0.0001$ | $0.0210$ | $0.0839$ |
-| **RA vs. Random** | **+1,118.42 min** | $< 0.0001$ | $0.0248$ | $0.0839$ |
+| Comparison | Mean Diff (min) | Route-Level 95% Bootstrap CI | Cell-Level $p$ ($N=48$) | Route-Clustered $p$ ($N=3$) | Holm-Bonferroni Adj. $p$ |
+|---|---:|:---:|---:|---:|---:|
+| **RA vs. AB** | **-16.62 min** | [-55.48, +3.95] | $0.3626$ | $0.4825$ | $0.4825$ |
+| **RA vs. RB** | **+1,050.28 min** | [+830.29, +1,239.51] | $< 0.0001$ | $0.0126$ | $0.0631$ |
+| **RA vs. Slack** | **+1,014.41 min** | [+394.52, +1,475.30] | $< 0.0001$ | $0.0877$ | $0.1754$ |
+| **RA vs. Deadline** | **+1,145.87 min** | [+834.88, +1,414.37] | $< 0.0001$ | $0.0210$ | $0.0839$ |
+| **RA vs. Random** | **+1,118.42 min** | [+759.68, +1,299.85] | $< 0.0001$ | $0.0248$ | $0.0839$ |
 
-*Methodological Note*: When clustering at the route level ($N=3$ independent held-out routes), standard errors widen appropriately to guard against pseudo-replication. While RA outperforms RB by over 1,000 minutes, statistical power after multiple testing correction requires expanding the held-out sample size ($N \ge 20$ routes) for formal rejection of the null hypothesis at $\alpha=0.05$.
+*Defensible Scientific Conclusion*: RA shows large operational improvements over risk-only and conventional targeting (averaging >1,000 minutes of saved tardiness), but none of the route-clustered comparisons remain statistically significant after Holm–Bonferroni correction because only three independent test routes are available ($N=3$). Formal confirmation of statistical significance under route clustering requires expanding the held-out route sample based on a prospective power analysis before writing definitive results into `main.tex`.
 
 ---
 
