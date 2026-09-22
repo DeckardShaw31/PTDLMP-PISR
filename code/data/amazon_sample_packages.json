@@ -1,0 +1,100 @@
+{
+  "RouteID_AMZ_001": {
+    "Drop_01": {
+      "time_window": {
+        "start": "08:30:00",
+        "end": "09:30:00"
+      },
+      "planned_service_time_seconds": 180,
+      "package_volume_cm3": 2500
+    },
+    "Drop_02": {
+      "time_window": {
+        "start": "08:30:00",
+        "end": "09:45:00"
+      },
+      "planned_service_time_seconds": 180,
+      "package_volume_cm3": 2500
+    },
+    "Drop_03": {
+      "time_window": {
+        "start": "08:30:00",
+        "end": "10:00:00"
+      },
+      "planned_service_time_seconds": 180,
+      "package_volume_cm3": 2500
+    },
+    "Drop_04": {
+      "time_window": {
+        "start": "08:30:00",
+        "end": "10:15:00"
+      },
+      "planned_service_time_seconds": 180,
+      "package_volume_cm3": 2500
+    },
+    "Drop_05": {
+      "time_window": {
+        "start": "08:30:00",
+        "end": "10:30:00"
+      },
+      "planned_service_time_seconds": 180,
+      "package_volume_cm3": 2500
+    },
+    "Drop_06": {
+      "time_window": {
+        "start": "08:30:00",
+        "end": "09:10:00"
+      },
+      "planned_service_time_seconds": 180,
+      "package_volume_cm3": 2500
+    },
+    "Drop_07": {
+      "time_window": {
+        "start": "08:30:00",
+        "end": "11:00:00"
+      },
+      "planned_service_time_seconds": 180,
+      "package_volume_cm3": 2500
+    },
+    "Drop_08": {
+      "time_window": {
+        "start": "08:30:00",
+        "end": "09:15:00"
+      },
+      "planned_service_time_seconds": 180,
+      "package_volume_cm3": 2500
+    },
+    "Drop_09": {
+      "time_window": {
+        "start": "08:30:00",
+        "end": "11:30:00"
+      },
+      "planned_service_time_seconds": 180,
+      "package_volume_cm3": 2500
+    },
+    "Drop_10": {
+      "time_window": {
+        "start": "08:30:00",
+        "end": "11:45:00"
+      },
+      "planned_service_time_seconds": 180,
+      "package_volume_cm3": 2500
+    },
+    "Drop_11": {
+      "time_window": {
+        "start": "08:30:00",
+        "end": "12:00:00"
+      },
+      "planned_service_time_seconds": 180,
+      "package_volume_cm3": 2500
+    },
+    "Drop_12": {
+      "time_window": {
+        "start": "08:30:00",
+        "end": "12:15:00"
+      },
+      "planned_service_time_seconds": 180,
+      "package_volume_cm3": 2500
+    }
+  }
+}

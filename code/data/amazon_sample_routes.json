@@ -1,0 +1,73 @@
+{
+  "RouteID_AMZ_001": {
+    "station_code": "DLA3",
+    "departure_time": "08:30:00",
+    "stops": {
+      "DEPOT": {
+        "lat": 34.0522,
+        "lng": -118.2437,
+        "type": "Station"
+      },
+      "Drop_01": {
+        "lat": 34.066,
+        "lng": -118.24199999999999,
+        "type": "Dropoff"
+      },
+      "Drop_02": {
+        "lat": 34.078,
+        "lng": -118.235,
+        "type": "Dropoff"
+      },
+      "Drop_03": {
+        "lat": 34.082,
+        "lng": -118.232,
+        "type": "Dropoff"
+      },
+      "Drop_04": {
+        "lat": 34.094,
+        "lng": -118.22099999999999,
+        "type": "Dropoff"
+      },
+      "Drop_05": {
+        "lat": 34.098,
+        "lng": -118.214,
+        "type": "Dropoff"
+      },
+      "Drop_06": {
+        "lat": 34.11000000000001,
+        "lng": -118.211,
+        "type": "Dropoff"
+      },
+      "Drop_07": {
+        "lat": 34.114,
+        "lng": -118.19999999999999,
+        "type": "Dropoff"
+      },
+      "Drop_08": {
+        "lat": 34.126000000000005,
+        "lng": -118.193,
+        "type": "Dropoff"
+      },
+      "Drop_09": {
+        "lat": 34.13,
+        "lng": -118.19,
+        "type": "Dropoff"
+      },
+      "Drop_10": {
+        "lat": 34.142,
+        "lng": -118.179,
+        "type": "Dropoff"
+      },
+      "Drop_11": {
+        "lat": 34.146,
+        "lng": -118.172,
+        "type": "Dropoff"
+      },
+      "Drop_12": {
+        "lat": 34.158,
+        "lng": -118.169,
+        "type": "Dropoff"
+      }
+    }
+  }
+}

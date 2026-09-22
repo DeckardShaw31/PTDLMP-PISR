@@ -1,0 +1,55 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+.venv/
+ENV/
+
+# Testing & Caches
+.pytest_cache/
+.coverage
+htmlcov/
+.hypothesis/
+
+# LaTeX build artifacts
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.synctex.gz
+*.toc
+
+# Third-party thesis & raw datasets (proprietary / academic integrity)
+thesis/
+data/raw/
+*.csv.gz
+
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
