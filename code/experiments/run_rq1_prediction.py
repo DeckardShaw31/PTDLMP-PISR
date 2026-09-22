@@ -17,13 +17,8 @@ def run_rq1_experiment(
     data_dir: str,
     output_dir: str
 ) -> Tuple[RiskPredictionPipeline, Dict[str, Any], pd.DataFrame]:
-    routes_fp = os.path.join(data_dir, "routes_challenge.json")
-    pkgs_fp = os.path.join(data_dir, "package_data_challenge.json")
-    tt_fp = os.path.join(data_dir, "travel_times_challenge.json")
-    seq_fp = os.path.join(data_dir, "actual_sequences_challenge.json")
-
-    print("[RQ1] Loading official Amazon challenge dataset...")
-    instances = load_official_amazon_dataset(routes_fp, pkgs_fp, tt_fp, seq_fp)
+    print(f"[RQ1] Loading Amazon dataset from '{data_dir}'...")
+    instances = load_official_amazon_dataset(data_dir)
     print(f"[RQ1] Successfully loaded {len(instances)} routes.")
 
     # 1. Build dataset rows across all routes
@@ -96,6 +91,9 @@ def run_rq1_experiment(
 
 if __name__ == "__main__":
     base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-    d_dir = os.path.join(base_dir, "data", "challenge")
+    raw_dir = os.path.join(base_dir, "data", "raw")
+    challenge_dir = os.path.join(base_dir, "data", "challenge")
+    d_dir = raw_dir if os.path.exists(os.path.join(raw_dir, "route_data.json")) else challenge_dir
     o_dir = os.path.join(base_dir, "outputs")
+    print(f"[RQ1] Selected dataset directory: {d_dir}")
     run_rq1_experiment(d_dir, o_dir)

@@ -49,6 +49,7 @@ htmlcov/
 # Third-party thesis & raw datasets (proprietary / academic integrity)
 thesis/
 data/raw/
+*.part
 *.csv.gz
 
 # IDE & OS

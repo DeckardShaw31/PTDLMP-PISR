@@ -7,17 +7,25 @@ from typing import Dict, List, Optional, Tuple, Any, Union
 from .schemas import Stop, RouteInstance
 from ..routing.distance import haversine_distance
 
-def parse_iso_or_time_string(time_str: Optional[str], route_date: date) -> Optional[datetime]:
+def parse_iso_or_time_string(time_str: Optional[Any], route_date: date) -> Optional[datetime]:
     """
     Parses a time string which may be:
       - Full timestamp: 'YYYY-MM-DD HH:MM:SS' or 'YYYY-MM-DDTHH:MM:SS' or 'YYYY-MM-DDTHH:MM:SS.fZ'
       - Time-only: 'HH:MM:SS' or 'HH:MM'
     Returns a timezone-naive UTC datetime aligned with route_date.
     """
-    if not time_str or time_str.lower() in ("none", "null", ""):
+    if time_str is None:
+        return None
+    if isinstance(time_str, float):
+        if math.isnan(time_str):
+            return None
         return None
 
-    cleaned = time_str.strip().replace("T", " ").rstrip("Z")
+    s = str(time_str).strip()
+    if not s or s.lower() in ("none", "null", "nan", ""):
+        return None
+
+    cleaned = s.replace("T", " ").rstrip("Z")
     
     # Try parsing full datetime
     for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%d %H:%M"):
@@ -42,7 +50,8 @@ def load_official_amazon_dataset(
     travel_times_path: Optional[str] = None,
     actual_sequences_path: Optional[str] = None,
     fill_missing_travel_times_with_haversine: bool = True,
-    haversine_speed_kmh: float = 25.0
+    haversine_speed_kmh: float = 25.0,
+    default_sla_hours: Optional[float] = 4.0
 ) -> Dict[str, RouteInstance]:
     """
     Adapter for the official Amazon Last Mile Routing Challenge dataset schema.
@@ -60,23 +69,50 @@ def load_official_amazon_dataset(
       - package_volume_cm3 = sum(depth * height * width)
       - predicted_risk_pi = 0.0 (populated subsequently by RQ1 prediction model)
     """
+    # If routes_path is a directory, automatically discover files inside
+    if os.path.isdir(routes_path):
+        data_dir = routes_path
+        routes_candidates = ["route_data.json", "routes.json", "routes_challenge.json"]
+        packages_candidates = ["package_data.json", "packages.json", "package_data_challenge.json"]
+        travel_candidates = ["travel_times.json", "travel_times_challenge.json"]
+        seq_candidates = ["actual_sequences.json", "actual_sequences_challenge.json"]
+
+        routes_path = next((os.path.join(data_dir, f) for f in routes_candidates if os.path.exists(os.path.join(data_dir, f))), None)
+        if routes_path is None:
+            raise FileNotFoundError(f"Could not find route data JSON file in directory '{data_dir}'")
+        if packages_path is None:
+            packages_path = next((os.path.join(data_dir, f) for f in packages_candidates if os.path.exists(os.path.join(data_dir, f))), None)
+        if travel_times_path is None:
+            travel_times_path = next((os.path.join(data_dir, f) for f in travel_candidates if os.path.exists(os.path.join(data_dir, f))), None)
+        if actual_sequences_path is None:
+            actual_sequences_path = next((os.path.join(data_dir, f) for f in seq_candidates if os.path.exists(os.path.join(data_dir, f))), None)
+
     with open(routes_path, "r", encoding="utf-8") as f:
         routes_raw = json.load(f)
 
     packages_raw = {}
     if packages_path and os.path.exists(packages_path):
-        with open(packages_path, "r", encoding="utf-8") as f:
-            packages_raw = json.load(f)
+        try:
+            with open(packages_path, "r", encoding="utf-8") as f:
+                packages_raw = json.load(f)
+        except Exception:
+            packages_raw = {}
 
     travel_times_raw = {}
     if travel_times_path and os.path.exists(travel_times_path):
-        with open(travel_times_path, "r", encoding="utf-8") as f:
-            travel_times_raw = json.load(f)
+        try:
+            with open(travel_times_path, "r", encoding="utf-8") as f:
+                travel_times_raw = json.load(f)
+        except Exception:
+            travel_times_raw = {}
 
     actual_sequences_raw = {}
     if actual_sequences_path and os.path.exists(actual_sequences_path):
-        with open(actual_sequences_path, "r", encoding="utf-8") as f:
-            actual_sequences_raw = json.load(f)
+        try:
+            with open(actual_sequences_path, "r", encoding="utf-8") as f:
+                actual_sequences_raw = json.load(f)
+        except Exception:
+            actual_sequences_raw = {}
 
     instances: Dict[str, RouteInstance] = {}
 
@@ -146,6 +182,9 @@ def load_official_amazon_dataset(
                     end_str = tw.get("end_time_utc") or tw.get("end")
                     earliest_deadline = parse_iso_or_time_string(end_str, route_date)
                     pkg_count = 1
+
+            if earliest_deadline is None and default_sla_hours is not None and stype != "Station":
+                earliest_deadline = dep_time + timedelta(hours=default_sla_hours)
 
             stop_obj = Stop(
                 stop_id=stop_id,

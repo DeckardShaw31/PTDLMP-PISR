@@ -20,17 +20,14 @@ from src.evaluation.tables import format_markdown_table, format_latex_table
 
 def run_benchmark_experiments():
     base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-    d_dir = os.path.join(base_dir, "data", "challenge")
+    raw_dir = os.path.join(base_dir, "data", "raw")
+    challenge_dir = os.path.join(base_dir, "data", "challenge")
+    d_dir = raw_dir if os.path.exists(os.path.join(raw_dir, "route_data.json")) else challenge_dir
     o_dir = os.path.join(base_dir, "outputs")
     os.makedirs(o_dir, exist_ok=True)
 
-    routes_fp = os.path.join(d_dir, "routes_challenge.json")
-    pkgs_fp = os.path.join(d_dir, "package_data_challenge.json")
-    tt_fp = os.path.join(d_dir, "travel_times_challenge.json")
-    seq_fp = os.path.join(d_dir, "actual_sequences_challenge.json")
-
-    print("[Benchmark] Loading all challenge routes...")
-    instances = load_official_amazon_dataset(routes_fp, pkgs_fp, tt_fp, seq_fp)
+    print(f"[Benchmark] Loading Amazon routes from '{d_dir}'...")
+    instances = load_official_amazon_dataset(d_dir)
     
     # 1. Build dataset across all routes for RQ1 model
     all_rows = []
@@ -71,12 +68,13 @@ def run_benchmark_experiments():
     budgets = [0.05, 0.10, 0.20, 0.30]
     deltas = [0.00, 0.02, 0.05, 0.10]
     policies = ["RA", "AB", "RB", "Slack", "Deadline", "Random"]
-    random_seeds = list(range(1, 11))  # 10 random seeds for Random policy
+    random_seeds = [42, 43, 44]  # 3 random seeds for empirical Random distribution
 
     run_records = []
 
     # Run on Nearest Neighbor baseline
-    for r_id in test_route_ids:
+    for r_idx, r_id in enumerate(test_route_ids, 1):
+        print(f"[Benchmark] Evaluating test route {r_idx}/{len(test_route_ids)}: {r_id} ...", flush=True)
         inst = instances[r_id]
         num_customers = len([s for s, sobj in inst.stops.items() if sobj.stop_type == "Dropoff" or s != inst.depot_id])
         
