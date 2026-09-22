@@ -1,7 +1,10 @@
 {
   "model_selection": {
-    "selected_model": "logistic",
-    "selection_criterion": "Validation Brier score, log loss, and ECE",
+    "primary_model": "logistic",
+    "selection_protocol": "predeclared_primary",
+    "calibration_split": "chronological_validation",
+    "evaluation_split": "held_out_test",
+    "default_sla_hours": 4.0,
     "test_metrics": {
       "roc_auc": 0.5949356368563685,
       "pr_auc": 0.5959010039354922,

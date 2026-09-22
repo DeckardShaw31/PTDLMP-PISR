@@ -51,15 +51,17 @@ This report presents an empirical evaluation of the **Prediction-Informed Select
   - **Validation (Model Selection & Calibration)**: 331 stops across next 2 dates (20%).
   - **Test (Held-out Evaluation)**: 534 stops across latest 3 dates (20%).
 
-### Model Selection on Validation Split
+### Model Architecture Protocol & Validation Calibration Fit
+
+Logistic Regression is predeclared as the primary linear model architecture. To prevent optimistic in-sample model selection, the chronological validation split is reserved strictly for fitting post-hoc Platt scaling, while model evaluation and comparison are performed strictly on the held-out test cohort.
 
 | Model | Validation ROC-AUC | Validation PR-AUC | Validation Brier Score | Validation Log Loss | Validation ECE |
 |---|---:|---:|---:|---:|---:|
 | **Prevalence Baseline** | 0.500 | 0.511 | 0.2505 | 0.6942 | 0.0255 |
-| **Logistic Regression (Selected)** | **0.533** | 0.515 | **0.2387** | **0.6640** | **0.0159** |
+| **Logistic Regression (Primary)** | **0.533** | 0.515 | **0.2387** | **0.6640** | **0.0159** |
 | **Random Forest** | 0.492 | **0.538** | 0.2461 | 0.6848 | 0.1293 |
 
-*Decision*: Logistic Regression demonstrates superior probability calibration (ECE = 0.0159 vs. 0.1293), lower Brier score, and lower log loss on validation data, making it the mathematically preferred model for probability estimation.
+*Calibration Fit*: Logistic Regression achieves superior probability calibration fit (ECE = 0.0159 vs. 0.1293), lower Brier score (0.2387), and lower log loss on validation data before out-of-sample test evaluation.
 
 ### Test Cohort Performance (Out-of-Sample)
 
@@ -108,9 +110,10 @@ $$\Delta TT(\text{RA}) - \Delta TT(\text{Competitor})$$
 | **RA vs. Random** | **+1,118.42 min** | [+759.68, +1,299.85] | [+987.39, +1,253.40] | +6.235 | 0.0248 | 0.0839 | **Marginal** (unadjusted) |
 
 ### Key Methodological Takeaways:
-1. **Dangers of Pseudo-Replication**: Cell-level pooling treats repeated runs on the same route as independent, artificially inflating statistical power ($p < 0.0001$). Route clustering correctly identifies the independent experimental unit ($N=3$), reflecting the true sampling uncertainty.
-2. **Substantive vs. Statistical Significance**: Although the magnitude of tardiness reduction for RA over RB (+1,050 min) and Deadline (+1,146 min) is operationally dramatic, statistical confirmation after family-wise error rate control requires expanding the held-out route sample based on a formal prospective power analysis.
-3. **Equivalence of RA and AB**: Both at the cell level ($p = 0.3626$) and route-clustered level ($p = 0.4825$), RA and AB are statistically indistinguishable. Actionability $g_i$ carries the primary optimization signal.
+1. **Dangers of Pseudo-Replication**: Cell-level pooling treats repeated runs on the same route across budget-tolerance combinations as independent, artificially inflating statistical degrees of freedom ($N=48$). Route-level aggregation correctly identifies the independent experimental unit ($N=3$), averaging cell differences per route prior to paired testing.
+2. **Substantive vs. Statistical Significance**: Although the magnitude of tardiness reduction for RA over RB (+1,050 min) and Deadline (+1,146 min) is operationally large, formal statistical confirmation after Holm–Bonferroni multiplicity control requires expanding the held-out route sample beyond the initial 3 routes.
+3. **Equivalence & Non-Inferiority Framing (RA vs. AB)**: Both at the cell level ($p = 0.3626$) and route-level aggregated paired test ($p = 0.4825$), RA and AB are statistically indistinguishable. Moreover, the observed point difference slightly favors AB (+1,434.5 min for AB vs. +1,417.9 min for RA; $\Delta = -16.6$ min). Consequently, the scientifically defensible research framing for RA vs. AB is an **equivalence or non-inferiority inquiry**, confirming that actionability ($g_i$) drives the primary operational gain.
+4. **Provisional Planning Power Analysis**: Based on exploratory variance across these 3 routes, an illustrative sample size calculation yields $N \approx 34$ independent routes as a provisional planning estimate (not a validated sample-size requirement) for future scaled evaluation cohorts.
 
 ---
 

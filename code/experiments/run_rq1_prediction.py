@@ -1,7 +1,7 @@
 import os
 import sys
 import json
-from typing import Tuple, Dict, Any, List
+from typing import Tuple, Dict, Any, List, Optional
 import numpy as np
 import pandas as pd
 
@@ -15,10 +15,11 @@ from src.evaluation.tables import format_markdown_table, format_latex_table
 
 def run_rq1_experiment(
     data_dir: str,
-    output_dir: str
+    output_dir: str,
+    default_sla_hours: Optional[float] = 4.0
 ) -> Tuple[RiskPredictionPipeline, Dict[str, Any], pd.DataFrame]:
-    print(f"[RQ1] Loading Amazon dataset from '{data_dir}'...")
-    instances = load_official_amazon_dataset(data_dir, strict_mode=True, default_sla_hours=4.0)
+    print(f"[RQ1] Loading Amazon dataset from '{data_dir}' (default_sla_hours={default_sla_hours})...")
+    instances = load_official_amazon_dataset(data_dir, strict_mode=True, default_sla_hours=default_sla_hours)
     print(f"[RQ1] Successfully loaded {len(instances)} routes.")
 
     # 1. Build dataset rows across all routes
@@ -55,7 +56,7 @@ def run_rq1_experiment(
           f"Val={len(df_val)} stops ({df_val['route_date'].nunique()} dates), "
           f"Test={len(df_test)} stops ({df_test['route_date'].nunique()} dates)")
 
-    # 4. Compare Models: Prevalence Baseline, Logistic Regression, Random Forest
+    # 4. Compare Models: Prevalence Baseline, Logistic Regression (Primary), Random Forest
     results = {}
     from src.prediction.evaluate import evaluate_predictions
 
@@ -71,7 +72,7 @@ def run_rq1_experiment(
         "validation": val_prev_metrics
     }
 
-    # Logistic Regression
+    # Logistic Regression (Predeclared Primary Model Architecture)
     pipe_lr, metrics_lr, test_preds_lr = train_and_evaluate_pipeline(dataset, feature_cols, model_type="logistic")
     results["LogisticRegression"] = metrics_lr
 
@@ -80,7 +81,7 @@ def run_rq1_experiment(
     results["RandomForest"] = metrics_rf
 
     print("\n" + "=" * 70)
-    print("RQ1 VALIDATION MODEL SELECTION COMPARISON (CHRONOLOGICAL SPLIT)")
+    print("RQ1 VALIDATION CALIBRATION FIT (CHRONOLOGICAL SPLIT)")
     print("=" * 70)
     val_headers = ["Model", "Val ROC-AUC", "Val PR-AUC", "Val Brier Score", "Val Log Loss", "Val ECE"]
     val_rows = []
@@ -96,13 +97,14 @@ def run_rq1_experiment(
         ])
     print(format_markdown_table(val_headers, val_rows))
 
-    # Model Selection Rule: select model with lowest validation Brier score
-    brier_lr = metrics_lr["validation"]["brier_score"]
-    brier_rf = metrics_rf["validation"]["brier_score"]
-    selected_name = "LogisticRegression" if brier_lr <= brier_rf else "RandomForest"
-    selected_pipe = pipe_lr if selected_name == "LogisticRegression" else pipe_rf
-    selected_preds = test_preds_lr if selected_name == "LogisticRegression" else test_preds_rf
-    print(f"\n[RQ1] Model Selection Decision: '{selected_name}' selected based on validation Brier ({min(brier_lr, brier_rf):.4f}).")
+    # Predeclared Primary Model Architecture:
+    # Logistic Regression is predeclared as the primary linear model architecture.
+    # Chronological validation split is used strictly for fitting post-hoc Platt calibration.
+    # Out-of-sample evaluation and model comparison are conducted on the held-out test split.
+    primary_name = "LogisticRegression"
+    selected_pipe = pipe_lr
+    selected_preds = test_preds_lr
+    print(f"\n[RQ1] Primary Model Protocol: Predeclared '{primary_name}' with validation Platt calibration.")
 
     print("\n" + "=" * 70)
     print("RQ1 PREDICTION EVALUATION RESULTS (OUT-OF-SAMPLE TEST COHORT)")
@@ -121,6 +123,15 @@ def run_rq1_experiment(
         ])
     print(format_markdown_table(table_headers, table_rows))
 
+    results["_metadata"] = {
+        "primary_model": primary_name,
+        "model_selection_protocol": "predeclared_primary",
+        "calibration_split": "chronological_validation",
+        "evaluation_split": "held_out_test",
+        "default_sla_hours": default_sla_hours,
+        "target_label_definition": "route_propagated_promised_time_violation_proxy"
+    }
+
     os.makedirs(output_dir, exist_ok=True)
     out_json = os.path.join(output_dir, "rq1_prediction_results.json")
     with open(out_json, "w") as f:
@@ -130,10 +141,15 @@ def run_rq1_experiment(
     selected_preds["route"] = selected_preds["route_id"] if "route_id" in selected_preds.columns else selected_preds["route_date"]
     selected_preds["customer"] = selected_preds["customer_id"]
     selected_preds["probability"] = selected_preds["predicted_risk_pi"]
-    selected_preds["selected_model"] = selected_name
+    selected_preds["selected_model"] = primary_name
+    selected_preds["model_selection_protocol"] = "predeclared_primary"
     selected_preds["target_label_definition"] = "route_propagated_promised_time_violation_proxy"
     out_csv = os.path.join(output_dir, "rq1_test_predictions.csv")
-    cols_to_save = ["route", "customer", "label", "probability", "route_id", "customer_id", "predicted_risk_pi", "route_date", "selected_model", "target_label_definition"]
+    cols_to_save = [
+        "route", "customer", "label", "probability", "route_id", "customer_id",
+        "predicted_risk_pi", "route_date", "selected_model", "model_selection_protocol",
+        "target_label_definition"
+    ]
     avail_cols = [c for c in cols_to_save if c in selected_preds.columns]
     selected_preds[avail_cols].to_csv(out_csv, index=False)
     print(f"[RQ1] Saved predictions to '{out_csv}' ({len(selected_preds)} rows).")

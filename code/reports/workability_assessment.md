@@ -70,9 +70,24 @@ The table below reports the exact reproducible numbers from the 180 synthetic fa
 
 ## 4. Software Verification & Hardened Validator Status
 
-All 17 automated unit tests pass (`python -m pytest code/tests -v`):
+All 32 automated unit tests pass (`python -m pytest code/tests -v`):
 
 ```
+code/tests/test_amazon_adapter.py::test_parse_iso_or_time_string PASSED
+code/tests/test_amazon_adapter.py::test_load_official_amazon_dataset_multi_package_aggregation PASSED
+code/tests/test_amazon_adapter.py::test_strict_mode_rejects_missing_or_corrupt_date PASSED
+code/tests/test_amazon_adapter.py::test_strict_mode_rejects_missing_or_corrupt_departure PASSED
+code/tests/test_amazon_adapter.py::test_strict_mode_rejects_missing_station_depot PASSED
+code/tests/test_benchmark_smoke.py::test_run_benchmark_experiments_smoke PASSED
+code/tests/test_benchmark_smoke.py::test_benchmark_reduced_grid_smoke PASSED
+code/tests/test_distance_delta_property.py::test_distance_delta_random_routes_property PASSED
+code/tests/test_distance_delta_property.py::test_distance_delta_specific_scenarios PASSED
+code/tests/test_distance_delta_property.py::test_distance_delta_invalid_indices_raise PASSED
+code/tests/test_prediction_pipeline.py::test_leakage_guard_rejects_forbidden_features PASSED
+code/tests/test_prediction_pipeline.py::test_chronological_split PASSED
+code/tests/test_prediction_pipeline.py::test_probability_calibrator PASSED
+code/tests/test_prediction_pipeline.py::test_end_to_end_prediction_pipeline PASSED
+code/tests/test_prediction_pipeline.py::test_route_clustered_statistics PASSED
 code/tests/test_schedule_and_invariants.py::test_hand_calculated_3_customer_route PASSED
 code/tests/test_schedule_and_invariants.py::test_downstream_delay_evaluated_globally PASSED
 code/tests/test_schedule_and_invariants.py::test_tt_decreases_while_nl_increases PASSED
@@ -98,6 +113,7 @@ code/tests/test_schedule_and_invariants.py::test_slack_vs_deadline_ranking_diver
 3. **Promised Delivery Deadlines**: Routes containing customer dropoffs with `promised_time=None` are rejected when `require_promised_times=True`.
 4. **Matrix Edge Completeness**: Any sequential edge $(u, v)$ missing from `travel_times` or `distances` is rejected when `require_complete_matrices=True`.
 5. **Decoupled Operational Slack**: True operational slack ($\tau_i - c_i(R^0)$) is implemented and verified to diverge from raw deadline ($\tau_i$).
+6. **Local Edge Distance Delta Equivalence**: $O(1)$ relocation delta $\Delta D$ verified mathematically equivalent ($|\Delta D_{local} - \Delta D_{full}| < 10^{-9}$) to full route distance recomputation across random instances, adjacent moves, non-adjacent moves, last-stop relocations, and both return-to-depot modes.
 
 ---
 
@@ -106,17 +122,19 @@ code/tests/test_schedule_and_invariants.py::test_slack_vs_deadline_ranking_diver
 The empirical infrastructure has progressed significantly from preliminary synthetic fixtures to the official Amazon dataset:
 
 ### Completed Milestones:
-1. **Official Amazon Last Mile Adapter (Strict Mode)**: Fully integrated parser for official schemas (`route_data.json`, `package_data.json`, `travel_times.json`, `actual_sequences.json`). Runs with strict mode validation: fails explicitly on missing/corrupt files, audits actual sequences without silent fallback, disables arbitrary imputation, and reports 0 imputed edges on official matrices.
-2. **RQ1 Chronological ML Prediction Pipeline**: Chronological 60/20/20 split across dispatch dates, strict leakage guard preventing post-departure leakage, prevalence-only baseline, and validation calibration model selection. Logistic Regression achieved superior calibration over Random Forest (Validation Brier: 0.2387 vs 0.2461, ECE: 0.0159 vs 0.1293) and was formally selected. Ground truth targets are strictly defined as the *route-propagated promised-time violation proxy*.
+1. **Official Amazon Last Mile Adapter (Strict Mode)**: Fully integrated parser for official schemas (`route_data.json`, `package_data.json`, `travel_times.json`, `actual_sequences.json`). Strict mode validation asserts explicit failure (`ValueError`) on missing/corrupt dates, missing departures, or missing Station depots, audits actual sequences without silent fallback, supports unconstrained execution (`default_sla_hours=None`), and reports 0 imputed edges on official matrices.
+2. **RQ1 Chronological ML Prediction Pipeline**: Chronological 60/20/20 split across dispatch dates, strict leakage guard preventing post-departure leakage, prevalence-only baseline, and predeclared primary linear model protocol. Logistic Regression is predeclared as the primary linear model architecture; the chronological validation split is strictly reserved for post-hoc Platt calibration, and comparative evaluation is conducted on the held-out test split (Test ROC-AUC: 0.595, PR-AUC: 0.596, Brier: 0.2404, ECE: 0.0095). Ground truth targets are strictly defined as the *route-propagated promised-time violation proxy*.
 3. **RQ2 Held-Out Empirical Routing Benchmark**: Evaluated 288 factorial runs ($3 \text{ routes} \times 4 \text{ budgets} \times 4 \text{ tolerances} \times 6 \text{ policies}$) with 10 random seeds per cell, Clarke-Wright baseline comparisons, individual seed exports (`random_seed_runs.csv`), and runtime profiling with $O(1)$ distance delta pruning.
-4. **Route-Clustered Statistical Inference**: Implemented cluster-robust standard errors and Holm–Bonferroni corrections to prevent cell-level pseudo-replication across repeated evaluation cells.
+4. **Route-Level Aggregated Statistical Inference**: Rather than assuming cell-level independence (pseudo-replication across 48 repeated budget-tolerance cells), the statistical engine aggregates scenario differences to route-level means before performing paired t-tests with Holm–Bonferroni multiplicity correction.
+5. **End-to-End Benchmark Execution in CI**: The test suite includes direct execution of `run_benchmark_experiments()` with a reduced parameter slice in `test_benchmark_smoke.py`, ensuring full pipeline coverage.
 
-### Next Empirical Milestones & Prospective Power Analysis:
-1. **Prospective Power Analysis**:
-   - The current held-out cohort of $N=3$ independent routes correctly demonstrates actionability dominance ($g_i = \max \Delta TT$), where actionability alone ($AB$: +12.2% reduction, +1,434.5 min) and risk-actionability ($RA$: +12.1% reduction, +1,417.9 min) vastly outperform pure risk ($RB$: +2.9% reduction, +367.6 min) and Random (+2.5% reduction).
+### Next Empirical Milestones & Provisional Power Analysis:
+1. **Provisional Power Analysis (Exploratory Estimate)**:
+   - The current held-out cohort of $N=3$ independent routes demonstrates actionability dominance ($g_i = \max \Delta TT$), where actionability alone ($AB$: +12.2% reduction, +1,434.5 min) and risk-actionability ($RA$: +12.1% reduction, +1,417.9 min) vastly outperform pure risk ($RB$: +2.9% reduction, +367.6 min) and Random (+2.5% reduction).
    - Because $N=3$ yields only 2 degrees of freedom, Holm-adjusted tests for RA vs AB ($p=0.4825$) and RA vs RB ($p=0.0631$) remain underpowered.
-   - Based on observed variance, detecting the medium effect between RA and AB ($d \approx 0.49$) at $\alpha=0.05$ with $80\%$ statistical power requires $N \approx 34$ independent routes; detecting the massive effect of RA over RB ($d \approx 5.09$) requires $N \approx 5$ independent routes.
-2. **Expansion to Full Official Evaluation Cohort**: Scale the evaluation grid to $N \ge 35$ independent routes from the 3,072 evaluation routes released in the Amazon challenge dataset.
+   - Based on exploratory variance across these 3 routes, detecting a hypothetical medium difference between RA and AB ($d \approx 0.49$) at $\alpha=0.05$ with $80\%$ statistical power yields a provisional planning estimate of $N \approx 34$ independent routes (not a validated sample-size requirement).
+   - *Crucial Methodological Caveat*: In the observed 3-route sample, the empirical difference favors AB over RA ($\Delta = -16.6$ min; +1,434.5 min for AB vs +1,417.9 min for RA). Therefore, rather than a superiority hypothesis for RA over AB, an **equivalence or non-inferiority inquiry** is the scientifically defensible research framing.
+2. **Expansion to Full Official Evaluation Cohort**: Scale the evaluation grid to $N \ge 35$ independent routes from the broader released Amazon Challenge dataset.
 3. **Station and Date Robustness**: Evaluate policy stability across heterogeneous delivery stations (urban vs suburban) and weather/traffic conditions.
 
 ---
@@ -127,6 +145,6 @@ The empirical infrastructure has progressed significantly from preliminary synth
 > "The core algorithmic kernel of PISR (Algorithm 1) and Proposition 1 are mathematically verified, computationally workable, and fully tested on official Amazon Last Mile Challenge data.
 > 
 > The most defensible current scientific conclusion is:
-> **PISR is computationally workable, and actionability-based targeting produces large simulated tardiness reductions. Current evidence demonstrates actionability dominance: actionability alone ($g_i$) drives operational value, while pure risk without actionability ($RB$) fails. Multiplying actionability by predicted risk ($RA$) does not outperform actionability alone ($AB$).**
+> **PISR is computationally workable, and actionability-based targeting produces large simulated tardiness reductions. Current evidence demonstrates actionability dominance: actionability alone ($g_i$) drives operational value, while pure risk without actionability ($RB$) performs poorly. Risk weighting ($RA$) does not improve upon actionability alone ($AB$).**
 > 
-> We have completed the official adapter in strict mode, validated model selection on chronological splits (Logistic Regression selected via validation Brier/ECE), and replaced cell-level pseudo-replication with route-clustered statistics. Before finalizing `main.tex`, we will scale the evaluation using a prospective power analysis ($N \approx 34$ routes) across the broader Amazon challenge dataset."
+> We have completed the official adapter in strict mode (with explicit error checking on dates, departures, and depots), predeclared Logistic Regression as the primary model with validation-fitted Platt calibration and held-out test evaluation, validated the local distance delta against full route recomputation ($|\Delta D| < 10^{-9}$), and implemented route-level aggregated paired tests with Holm–Bonferroni correction. Before updating `main.tex`, we will scale the evaluation using the provisional planning estimate ($N \approx 34$ routes) across the broader Amazon challenge dataset."

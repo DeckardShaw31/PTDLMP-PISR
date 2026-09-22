@@ -17,6 +17,10 @@ class PostHocCalibrator(BaseEstimator, ClassifierMixin):
         val_probs = np.clip(np.asarray(val_uncalibrated_probs, dtype=float), 1e-5, 1.0 - 1e-5)
         y_val = np.asarray(y_val, dtype=int)
 
+        if len(np.unique(y_val)) < 2:
+            self.calibrator_ = None
+            return self
+
         if self.method == "sigmoid":
             # Platt scaling: log-odds as input to 1D LogisticRegression
             log_odds = np.log(val_probs / (1.0 - val_probs)).reshape(-1, 1)

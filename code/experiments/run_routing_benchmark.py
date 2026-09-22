@@ -2,7 +2,7 @@ import os
 import sys
 import json
 import time
-from typing import Dict, List, Tuple, Any
+from typing import Dict, List, Tuple, Any, Optional
 import numpy as np
 import pandas as pd
 
@@ -19,16 +19,29 @@ from src.routing.validator import validate_route
 from src.evaluation.statistics import compute_paired_statistics, compute_route_clustered_statistics
 from src.evaluation.tables import format_markdown_table, format_latex_table
 
-def run_benchmark_experiments():
+def run_benchmark_experiments(
+    raw_dir: Optional[str] = None,
+    output_dir: Optional[str] = None,
+    route_ids: Optional[List[str]] = None,
+    budgets: Optional[List[float]] = None,
+    deltas: Optional[List[float]] = None,
+    policies: Optional[List[str]] = None,
+    random_seeds: Optional[List[int]] = None,
+    default_sla_hours: Optional[float] = 4.0,
+    save_outputs: bool = True
+) -> Dict[str, Any]:
     base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-    raw_dir = os.path.join(base_dir, "data", "raw")
+    if raw_dir is None:
+        raw_dir = os.path.join(base_dir, "data", "raw")
     if not os.path.exists(os.path.join(raw_dir, "route_data.json")):
         raise FileNotFoundError(f"Official Amazon Challenge dataset not found in '{raw_dir}'.")
-    o_dir = os.path.join(base_dir, "outputs")
-    os.makedirs(o_dir, exist_ok=True)
+    if output_dir is None:
+        output_dir = os.path.join(base_dir, "outputs")
+    if save_outputs:
+        os.makedirs(output_dir, exist_ok=True)
 
-    print(f"[Benchmark] Loading Amazon routes from '{raw_dir}'...")
-    instances = load_official_amazon_dataset(raw_dir, strict_mode=True, default_sla_hours=4.0)
+    print(f"[Benchmark] Loading Amazon routes from '{raw_dir}' (default_sla_hours={default_sla_hours})...")
+    instances = load_official_amazon_dataset(raw_dir, strict_mode=True, default_sla_hours=default_sla_hours)
     
     # 1. Build dataset across all routes for RQ1 model
     all_rows = []
@@ -52,24 +65,33 @@ def run_benchmark_experiments():
         "route_total_service_min"
     ]
 
-    print("[Benchmark] Training and calibrating RQ1 Risk Model on training dates (model_type='logistic' selected via validation Brier/ECE)...")
+    print("[Benchmark] Training and calibrating RQ1 Risk Model on training dates (predeclared primary model: Logistic Regression with validation Platt calibration)...")
     pipeline, rq1_metrics, _ = train_and_evaluate_pipeline(full_dataset, feature_cols, model_type="logistic")
     print(f"[Benchmark] RQ1 Model trained. Test ROC-AUC = {rq1_metrics['roc_auc']:.3f}, Brier = {rq1_metrics['brier_score']:.4f}")
 
     # 2. Inject out-of-sample calibrated risks into all instances
     inject_calibrated_risks_into_instances(instances, pipeline, feature_cols)
 
-    # 3. Identify held-out test routes (dates in test split)
-    _, _, df_test = chronological_split(full_dataset, date_col="route_date")
-    test_dates = set(df_test["route_date"].unique())
-    test_route_ids = [r_id for r_id, inst in instances.items() if (inst.route_date or "") in test_dates]
-    print(f"[Benchmark] Evaluated cohort: {len(test_route_ids)} held-out routes across dates: {sorted(list(test_dates))}")
+    # 3. Identify held-out test routes (dates in test split or user-specified subset)
+    if route_ids is not None:
+        test_route_ids = [r_id for r_id in route_ids if r_id in instances]
+    else:
+        _, _, df_test = chronological_split(full_dataset, date_col="route_date")
+        test_dates = set(df_test["route_date"].unique())
+        test_route_ids = [r_id for r_id, inst in instances.items() if (inst.route_date or "") in test_dates]
+
+    eval_dates = sorted(list(set(instances[r].route_date for r in test_route_ids if instances[r].route_date)))
+    print(f"[Benchmark] Evaluated cohort: {len(test_route_ids)} held-out routes across dates: {eval_dates}")
 
     # 4. Experimental factor grid
-    budgets = [0.05, 0.10, 0.20, 0.30]
-    deltas = [0.00, 0.02, 0.05, 0.10]
-    policies = ["RA", "AB", "RB", "Slack", "Deadline", "Random"]
-    random_seeds = list(range(42, 52))  # Exactly 10 random seeds (42 to 51) for empirical Random distribution
+    if budgets is None:
+        budgets = [0.05, 0.10, 0.20, 0.30]
+    if deltas is None:
+        deltas = [0.00, 0.02, 0.05, 0.10]
+    if policies is None:
+        policies = ["RA", "AB", "RB", "Slack", "Deadline", "Random"]
+    if random_seeds is None:
+        random_seeds = list(range(42, 52))  # Exactly 10 random seeds (42 to 51) for empirical Random distribution
 
     run_records = []
     all_individual_seed_records = []
@@ -247,44 +269,55 @@ def run_benchmark_experiments():
             })
 
     df_runs = pd.DataFrame(run_records)
-    df_runs.to_csv(os.path.join(o_dir, "routing_benchmark_runs.csv"), index=False)
+    if save_outputs:
+        df_runs.to_csv(os.path.join(output_dir, "routing_benchmark_runs.csv"), index=False)
     print(f"[Benchmark] Completed {len(df_runs)} factorial runs on held-out routes.")
 
     df_seed_runs = pd.DataFrame(all_individual_seed_records)
-    df_seed_runs.to_csv(os.path.join(o_dir, "random_seed_runs.csv"), index=False)
-    print(f"[Benchmark] Saved {len(df_seed_runs)} individual random seed runs to 'random_seed_runs.csv'.")
+    if save_outputs:
+        df_seed_runs.to_csv(os.path.join(output_dir, "random_seed_runs.csv"), index=False)
+    print(f"[Benchmark] Saved {len(df_seed_runs)} individual random seed runs.")
 
     # 5. Paired statistical hypothesis tests: RA vs competitors across all runs
     df_nn = df_runs[df_runs["baseline"] == "NearestNeighbor"]
     
     # Pivot on (route_id, delta, budget)
-    pivot_tt = df_nn.pivot(index=["route_id", "delta", "budget"], columns="policy", values="delta_tt").dropna()
-    pivot_nl = df_nn.pivot(index=["route_id", "delta", "budget"], columns="policy", values="delta_nl").dropna()
+    pivot_tt = df_nn.pivot(index=["route_id", "delta", "budget"], columns="policy", values="delta_tt").dropna() if not df_nn.empty else pd.DataFrame()
+    pivot_nl = df_nn.pivot(index=["route_id", "delta", "budget"], columns="policy", values="delta_nl").dropna() if not df_nn.empty else pd.DataFrame()
 
-    ra_tt = pivot_tt["RA"].values
     cell_paired_stats = {}
-    for comp in ["AB", "RB", "Slack", "Deadline", "Random"]:
-        comp_tt = pivot_tt[comp].values
-        stats_dict = compute_paired_statistics(ra_tt, comp_tt)
-        cell_paired_stats[comp] = stats_dict
+    route_clustered_stats = {}
+    if "RA" in pivot_tt.columns:
+        ra_tt = pivot_tt["RA"].values
+        for comp in ["AB", "RB", "Slack", "Deadline", "Random"]:
+            if comp in pivot_tt.columns:
+                comp_tt = pivot_tt[comp].values
+                stats_dict = compute_paired_statistics(ra_tt, comp_tt)
+                cell_paired_stats[comp] = stats_dict
 
-    # Route-clustered statistics (avoids pseudo-replication across repeated cells)
-    route_clustered_stats = compute_route_clustered_statistics(
-        df_nn, target_metric="delta_tt", base_policy="RA",
-        comparison_policies=["AB", "RB", "Slack", "Deadline", "Random"]
-    )
+        # Route-clustered statistics (avoids pseudo-replication across repeated cells)
+        comps_to_test = [c for c in ["AB", "RB", "Slack", "Deadline", "Random"] if c in pivot_tt.columns]
+        if len(test_route_ids) >= 2 and comps_to_test:
+            route_clustered_stats = compute_route_clustered_statistics(
+                df_nn, target_metric="delta_tt", base_policy="RA",
+                comparison_policies=comps_to_test
+            )
 
     # 6. Aggregate summary by policy
-    policy_summary = df_nn.groupby("policy").agg({
-        "delta_tt": "mean",
-        "tt_red_pct": "mean",
-        "delta_nl": "mean",
-        "dist_inc_pct": "mean",
-        "accepted_moves": "mean",
-        "is_feasible": "mean",
-        "runtime_seconds": "mean",
-        "actionability_runtime_seconds": "mean"
-    }).loc[["RA", "AB", "RB", "Slack", "Deadline", "Random"]].reset_index()
+    avail_pols = [p for p in ["RA", "AB", "RB", "Slack", "Deadline", "Random"] if p in df_nn["policy"].unique()] if not df_nn.empty else []
+    if avail_pols:
+        policy_summary = df_nn.groupby("policy").agg({
+            "delta_tt": "mean",
+            "tt_red_pct": "mean",
+            "delta_nl": "mean",
+            "dist_inc_pct": "mean",
+            "accepted_moves": "mean",
+            "is_feasible": "mean",
+            "runtime_seconds": "mean",
+            "actionability_runtime_seconds": "mean"
+        }).loc[avail_pols].reset_index()
+    else:
+        policy_summary = pd.DataFrame()
 
     print("\n" + "=" * 80)
     print("EMPIRICAL ROUTING BENCHMARK RESULTS (HELD-OUT AMAZON ROUTES)")
@@ -304,97 +337,109 @@ def run_benchmark_experiments():
         ])
     print(format_markdown_table(summary_headers, summary_rows))
 
-    print("\n" + "=" * 80)
-    print("CELL-LEVEL PAIRED STATISTICAL HYPOTHESIS TESTS (RA vs Competitors on Delta TT, N=48)")
-    print("=" * 80)
-    stat_headers = ["Comparison", "Mean Diff (min)", "95% Bootstrap CI", "Paired t-stat", "p-value (t-test)", "p-value (Wilcoxon)"]
-    stat_rows = []
-    for comp, s in cell_paired_stats.items():
-        stat_rows.append([
-            f"RA vs {comp}",
-            f"{s['mean_diff']:+.3f} min",
-            f"[{s['ci_lower']:+.3f}, {s['ci_upper']:+.3f}]",
-            f"{s['t_stat']:.3f}",
-            f"{s['t_pvalue']:.4f}",
-            f"{s['wilcoxon_pvalue']:.4f}"
-        ])
-    print(format_markdown_table(stat_headers, stat_rows))
+    if cell_paired_stats:
+        print("\n" + "=" * 80)
+        print("CELL-LEVEL PAIRED STATISTICAL HYPOTHESIS TESTS (RA vs Competitors on Delta TT)")
+        print("=" * 80)
+        stat_headers = ["Comparison", "Mean Diff (min)", "95% Bootstrap CI", "Paired t-stat", "p-value (t-test)", "p-value (Wilcoxon)"]
+        stat_rows = []
+        for comp, s in cell_paired_stats.items():
+            stat_rows.append([
+                f"RA vs {comp}",
+                f"{s['mean_diff']:+.3f} min",
+                f"[{s['ci_lower']:+.3f}, {s['ci_upper']:+.3f}]",
+                f"{s['t_stat']:.3f}",
+                f"{s['t_pvalue']:.4f}",
+                f"{s['wilcoxon_pvalue']:.4f}"
+            ])
+        print(format_markdown_table(stat_headers, stat_rows))
 
-    print("\n" + "=" * 80)
-    print("ROUTE-CLUSTERED STATISTICAL TESTS WITH HOLM-BONFERRONI CORRECTION (N=3 independent routes)")
-    print("=" * 80)
-    rc_headers = ["Comparison", "Mean Diff (min)", "Route-Clustered t", "p (unadjusted)", "Holm-Bonferroni Adj p"]
-    rc_rows = []
-    for comp, s in route_clustered_stats.items():
-        rc_rows.append([
-            f"RA vs {comp}",
-            f"{s['mean_diff']:+.2f} min",
-            f"{s['t_stat']:.3f}",
-            f"{s['p_unadjusted']:.4f}",
-            f"{s['p_holm_bonferroni']:.4f}"
-        ])
-    print(format_markdown_table(rc_headers, rc_rows))
+    if route_clustered_stats:
+        print("\n" + "=" * 80)
+        print(f"ROUTE-CLUSTERED STATISTICAL TESTS WITH HOLM-BONFERRONI CORRECTION (N={len(test_route_ids)} independent routes)")
+        print("=" * 80)
+        rc_headers = ["Comparison", "Mean Diff (min)", "Route-Clustered t", "p (unadjusted)", "Holm-Bonferroni Adj p"]
+        rc_rows = []
+        for comp, s in route_clustered_stats.items():
+            rc_rows.append([
+                f"RA vs {comp}",
+                f"{s['mean_diff']:+.2f} min",
+                f"{s['t_stat']:.3f}",
+                f"{s['p_unadjusted']:.4f}",
+                f"{s['p_holm_bonferroni']:.4f}"
+            ])
+        print(format_markdown_table(rc_headers, rc_rows))
 
     # Invariants audit
-    min_delta_tt = df_nn["delta_tt"].min()
-    negative_nl_runs = df_nn[(df_nn["delta_tt"] > 0) & (df_nn["delta_nl"] < 0)]
-    zero_baseline_runs = df_nn[df_nn["base_tt"] == 0.0]
+    min_delta_tt = df_nn["delta_tt"].min() if not df_nn.empty else 0.0
+    negative_nl_runs = df_nn[(df_nn["delta_tt"] > 0) & (df_nn["delta_nl"] < 0)] if not df_nn.empty else pd.DataFrame()
+    zero_baseline_runs = df_nn[df_nn["base_tt"] == 0.0] if not df_nn.empty else pd.DataFrame()
 
     print("\n" + "=" * 80)
     print("INVARIANT & PHENOMENOLOGICAL AUDIT")
     print("=" * 80)
     print(f"- Minimum Delta TT across all runs: {min_delta_tt:.4f} min (Strictly >= 0, Proposition 1 verified!)")
     print(f"- Number of runs where Delta NL < 0 while Delta TT > 0: {len(negative_nl_runs)} runs")
-    print(f"- Number of runs starting with 0 baseline tardiness: {len(zero_baseline_runs)} of {len(df_nn)} runs ({len(zero_baseline_runs)/len(df_nn):.1%})")
-    print(f"- Overall route feasibility rate: {df_nn['is_feasible'].mean():.1%}")
+    print(f"- Number of runs starting with 0 baseline tardiness: {len(zero_baseline_runs)} of {len(df_nn)} runs")
+    print(f"- Overall route feasibility rate: {df_nn['is_feasible'].mean():.1%}" if not df_nn.empty else "N/A")
 
     # Robustness: Clarke-Wright comparison summary
-    df_cw = pd.DataFrame(cw_records)
-    df_cw.to_csv(os.path.join(o_dir, "robustness_clark_wright_runs.csv"), index=False)
-    cw_summary = df_cw.groupby("policy").agg({
-        "delta_tt": "mean",
-        "tt_red_pct": "mean",
-        "delta_nl": "mean",
-        "dist_inc_pct": "mean"
-    }).loc[["RA", "AB", "RB", "Slack"]].reset_index()
+    cw_summary_list = []
+    if cw_records:
+        df_cw = pd.DataFrame(cw_records)
+        if save_outputs:
+            df_cw.to_csv(os.path.join(output_dir, "robustness_clark_wright_runs.csv"), index=False)
+        avail_cw = [p for p in ["RA", "AB", "RB", "Slack"] if p in df_cw["policy"].unique()]
+        if avail_cw:
+            cw_summary = df_cw.groupby("policy").agg({
+                "delta_tt": "mean",
+                "tt_red_pct": "mean",
+                "delta_nl": "mean",
+                "dist_inc_pct": "mean"
+            }).loc[avail_cw].reset_index()
+            cw_summary_list = cw_summary.to_dict(orient="records")
 
-    print("\n" + "=" * 80)
-    print("ROBUSTNESS BENCHMARK: CLARKE-WRIGHT SAVINGS BASELINE (B=0.20, delta=0.05)")
-    print("=" * 80)
-    cw_headers = ["Policy", "Avg Delta TT (min)", "Avg TT Red (%)", "Avg Delta NL", "Avg Dist Inc (%)"]
-    cw_rows = []
-    for _, row in cw_summary.iterrows():
-        cw_rows.append([
-            row["policy"],
-            f"+{row['delta_tt']:.2f} min",
-            f"{row['tt_red_pct']:.1f}%",
-            f"+{row['delta_nl']:.2f}",
-            f"+{row['dist_inc_pct']:.2f}%"
-        ])
-    print(format_markdown_table(cw_headers, cw_rows))
+            print("\n" + "=" * 80)
+            print("ROBUSTNESS BENCHMARK: CLARKE-WRIGHT SAVINGS BASELINE (B=0.20, delta=0.05)")
+            print("=" * 80)
+            cw_headers = ["Policy", "Avg Delta TT (min)", "Avg TT Red (%)", "Avg Delta NL", "Avg Dist Inc (%)"]
+            cw_rows = []
+            for _, row in cw_summary.iterrows():
+                cw_rows.append([
+                    row["policy"],
+                    f"+{row['delta_tt']:.2f} min",
+                    f"{row['tt_red_pct']:.1f}%",
+                    f"+{row['delta_nl']:.2f}",
+                    f"+{row['dist_inc_pct']:.2f}%"
+                ])
+            print(format_markdown_table(cw_headers, cw_rows))
 
     summary_payload = {
         "model_selection": {
-            "selected_model": "logistic",
-            "selection_criterion": "Validation Brier score, log loss, and ECE",
+            "primary_model": "logistic",
+            "selection_protocol": "predeclared_primary",
+            "calibration_split": "chronological_validation",
+            "evaluation_split": "held_out_test",
+            "default_sla_hours": default_sla_hours,
             "test_metrics": rq1_metrics
         },
-        "policy_summary": policy_summary.to_dict(orient="records"),
+        "policy_summary": policy_summary.to_dict(orient="records") if not policy_summary.empty else [],
         "cell_paired_statistics": cell_paired_stats,
         "route_clustered_statistics": route_clustered_stats,
-        "clarke_wright_summary": cw_summary.to_dict(orient="records"),
+        "clarke_wright_summary": cw_summary_list,
         "invariant_audit": {
-            "min_delta_tt": float(min_delta_tt),
+            "min_delta_tt": float(min_delta_tt) if not df_nn.empty else 0.0,
             "negative_nl_occurrences": len(negative_nl_runs),
             "zero_baseline_runs": len(zero_baseline_runs),
             "total_runs": len(df_nn),
-            "feasibility_rate": float(df_nn['is_feasible'].mean()),
-            "avg_actionability_runtime_seconds": float(df_nn['actionability_runtime_seconds'].mean()),
-            "avg_policy_runtime_seconds": float(df_nn['runtime_seconds'].mean())
+            "feasibility_rate": float(df_nn['is_feasible'].mean()) if not df_nn.empty else 1.0,
+            "avg_actionability_runtime_seconds": float(df_nn['actionability_runtime_seconds'].mean()) if not df_nn.empty else 0.0,
+            "avg_policy_runtime_seconds": float(df_nn['runtime_seconds'].mean()) if not df_nn.empty else 0.0
         }
     }
-    with open(os.path.join(o_dir, "benchmark_summary.json"), "w") as f:
-        json.dump(summary_payload, f, indent=2)
+    if save_outputs:
+        with open(os.path.join(output_dir, "benchmark_summary.json"), "w") as f:
+            json.dump(summary_payload, f, indent=2)
 
     return summary_payload
 

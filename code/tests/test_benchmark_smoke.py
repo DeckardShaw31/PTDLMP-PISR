@@ -11,12 +11,50 @@ from src.routing.schedule import propagate_schedule
 from src.routing.actionability import compute_actionability_scores, rank_candidates, select_intervention_set
 from src.routing.sfr import selective_forward_relocation
 from src.routing.validator import validate_route
+from experiments.run_routing_benchmark import run_benchmark_experiments
+
+def test_run_benchmark_experiments_smoke(tmp_path):
+    """
+    Directly calls run_benchmark_experiments() on official Amazon data with a reduced slice:
+    1 route, 1 budget, 1 tolerance delta, 2 policies, 2 random seeds.
+    Verifies that run_benchmark_experiments executes end-to-end without unhandled crashes
+    and writes all required output artifacts (catching variable or parameter errors).
+    """
+    raw_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data", "raw"))
+    if not os.path.exists(os.path.join(raw_dir, "route_data.json")):
+        pytest.skip(f"Official raw dataset not found in '{raw_dir}'")
+
+    out_dir = str(tmp_path / "smoke_benchmark_out")
+    test_route_id = "RouteID_693060a6-88bb-4324-9e9c-925d5240263c"
+
+    summary = run_benchmark_experiments(
+        raw_dir=raw_dir,
+        output_dir=out_dir,
+        route_ids=[test_route_id],
+        budgets=[0.10],
+        deltas=[0.05],
+        policies=["RA", "Random"],
+        random_seeds=[42, 43],
+        default_sla_hours=4.0,
+        save_outputs=True
+    )
+
+    assert summary is not None
+    assert "model_selection" in summary
+    assert "policy_summary" in summary
+    assert "invariant_audit" in summary
+    assert summary["invariant_audit"]["min_delta_tt"] >= 0.0
+
+    # Verify generated artifacts
+    assert os.path.exists(os.path.join(out_dir, "benchmark_summary.json"))
+    assert os.path.exists(os.path.join(out_dir, "routing_benchmark_runs.csv"))
+    assert os.path.exists(os.path.join(out_dir, "random_seed_runs.csv"))
 
 def test_benchmark_reduced_grid_smoke():
     """
-    End-to-end smoke test executing a reduced benchmark grid on official data.
-    Verifies that the routing kernel, actionability computation, candidate selection,
-    relocation, schedule propagation, and runtime profiling execute without error.
+    Component-level smoke test executing the routing kernel on official data.
+    Verifies actionability computation, candidate selection, relocation, schedule propagation,
+    and runtime profiling execute without error across all policies.
     """
     raw_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data", "raw"))
     if not os.path.exists(os.path.join(raw_dir, "route_data.json")):
@@ -69,8 +107,6 @@ def test_benchmark_reduced_grid_smoke():
             pol_time = time.perf_counter() - t_pol
 
             assert v_res.feasible is True
-            # Proposition 1 invariant: tardiness never increases
             assert sched_fin.total_tardiness <= sched_base.total_tardiness + 1e-6
-            # Cumulative distance tolerance invariant
             assert sched_fin.total_distance <= (1.0 + delta) * sched_base.total_distance + 1e-6
             assert pol_time >= 0.0

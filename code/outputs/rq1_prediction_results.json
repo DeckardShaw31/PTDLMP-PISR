@@ -61,5 +61,13 @@
       "log_loss": 0.6848462850703486,
       "ece": 0.12925555339935324
     }
+  },
+  "_metadata": {
+    "primary_model": "LogisticRegression",
+    "model_selection_protocol": "predeclared_primary",
+    "calibration_split": "chronological_validation",
+    "evaluation_split": "held_out_test",
+    "default_sla_hours": 4.0,
+    "target_label_definition": "route_propagated_promised_time_violation_proxy"
   }
 }

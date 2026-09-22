@@ -4,7 +4,7 @@ from typing import Dict, List, Tuple, Optional
 from datetime import datetime
 from ..data.schemas import RouteInstance
 from .schedule import propagate_schedule
-from .distance import compute_route_distance, get_edge_distance
+from .distance import compute_route_distance, get_edge_distance, compute_relocation_distance_delta
 
 def compute_actionability_scores(
     instance: RouteInstance,
@@ -53,36 +53,8 @@ def compute_actionability_scores(
 
         # Enumerate candidate forward positions j < k (j >= 1)
         for j in range(1, k):
-            vj = baseline_route[j]
-            v_prev_j = baseline_route[j - 1]
-
             # O(1) distance delta check
-            if j == k - 1:
-                v_prev2 = baseline_route[k - 2]
-                delta_d = (
-                    - get_edge_distance(instance, v_prev2, v_prev_k)
-                    - get_edge_distance(instance, v_prev_k, vk)
-                    + get_edge_distance(instance, v_prev2, vk)
-                    + get_edge_distance(instance, vk, v_prev_k)
-                )
-                if v_next_k:
-                    delta_d += (
-                        - get_edge_distance(instance, vk, v_next_k)
-                        + get_edge_distance(instance, v_prev_k, v_next_k)
-                    )
-            else:
-                delta_d = (
-                    - get_edge_distance(instance, v_prev_j, vj)
-                    - get_edge_distance(instance, v_prev_k, vk)
-                    + get_edge_distance(instance, v_prev_j, vk)
-                    + get_edge_distance(instance, vk, vj)
-                )
-                if v_next_k:
-                    delta_d += (
-                        - get_edge_distance(instance, vk, v_next_k)
-                        + get_edge_distance(instance, v_prev_k, v_next_k)
-                    )
-
+            delta_d = compute_relocation_distance_delta(instance, baseline_route, k, j, return_to_depot=return_to_depot)
             cand_dist = base_dist + delta_d
             if cand_dist <= dist_limit:
                 cand_route = list(baseline_route)

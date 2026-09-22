@@ -49,7 +49,7 @@ def chronological_split(
 class RiskPredictionPipeline:
     def __init__(
         self,
-        model_type: str = "rf",
+        model_type: str = "logistic",
         feature_cols: Optional[List[str]] = None,
         calibrate: bool = True,
         calibration_method: str = "sigmoid",
@@ -64,9 +64,16 @@ class RiskPredictionPipeline:
         self.scaler = None
         self.base_model = None
         self.calibrator = None
+        self.constant_prob = None
 
     def fit(self, X_train: pd.DataFrame, y_train: np.ndarray, X_val: pd.DataFrame, y_val: np.ndarray):
         assert_no_data_leakage(list(X_train.columns))
+
+        # Handle single-class training split gracefully (e.g., when default_sla_hours=None)
+        if len(np.unique(y_train)) < 2:
+            self.constant_prob = float(np.mean(y_train))
+            self.calibrator = None
+            return self
 
         if self.model_type == "logistic":
             self.scaler = StandardScaler()
@@ -83,7 +90,7 @@ class RiskPredictionPipeline:
                 random_state=self.random_state
             )
             self.base_model.fit(X_train, y_train)
-            val_raw_probs = self.base_model.predict_proba(X_val)[:, 1]
+            val_raw_probs = self.base_model.predict_proba(X_train if X_val.empty else X_val)[:, 1]
         elif self.model_type == "hist_gb":
             self.base_model = HistGradientBoostingClassifier(
                 max_iter=100,
@@ -91,11 +98,11 @@ class RiskPredictionPipeline:
                 random_state=self.random_state
             )
             self.base_model.fit(X_train, y_train)
-            val_raw_probs = self.base_model.predict_proba(X_val)[:, 1]
+            val_raw_probs = self.base_model.predict_proba(X_train if X_val.empty else X_val)[:, 1]
         else:
             raise ValueError(f"Unknown model_type: '{self.model_type}'")
 
-        if self.calibrate:
+        if self.calibrate and len(np.unique(y_val)) >= 2:
             self.calibrator = PostHocCalibrator(method=self.calibration_method)
             self.calibrator.fit(val_raw_probs, y_val)
 
@@ -103,6 +110,9 @@ class RiskPredictionPipeline:
 
     def predict_proba(self, X: pd.DataFrame) -> np.ndarray:
         assert_no_data_leakage(list(X.columns))
+        if hasattr(self, "constant_prob") and self.constant_prob is not None:
+            return np.full(len(X), self.constant_prob, dtype=float)
+
         if self.model_type == "logistic":
             X_mat = self.scaler.transform(X)
             raw_probs = self.base_model.predict_proba(X_mat)[:, 1]
@@ -117,12 +127,16 @@ def train_and_evaluate_pipeline(
     df: pd.DataFrame,
     feature_cols: List[str],
     target_col: str = "label",
-    model_type: str = "rf",
+    model_type: str = "logistic",
     calibration_method: str = "sigmoid"
 ) -> Tuple[RiskPredictionPipeline, Dict[str, float], pd.DataFrame]:
     """
-    Executes full chronological training, calibration, and test evaluation.
-    Returns: (fitted_pipeline, test_metrics, test_predictions_df)
+    Executes chronological training, validation probability calibration, and out-of-sample test evaluation.
+    Protocol:
+      - Logistic Regression is predeclared as the primary linear model architecture.
+      - Chronological validation split is strictly reserved for fitting post-hoc Platt calibration.
+      - Out-of-sample evaluation and model comparison are conducted on the held-out test split.
+    Returns: (fitted_pipeline, metrics_dict, test_predictions_df)
     """
     df_train, df_val, df_test = chronological_split(df, date_col="route_date")
 

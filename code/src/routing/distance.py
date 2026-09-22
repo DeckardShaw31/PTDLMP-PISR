@@ -71,3 +71,60 @@ def compute_route_distance(instance: RouteInstance, route: List[str], return_to_
         total_dist += get_edge_distance(instance, route[-1], route[0])
         
     return total_dist
+
+def compute_relocation_distance_delta(
+    instance: RouteInstance,
+    route: List[str],
+    k: int,
+    j: int,
+    return_to_depot: bool = False
+) -> float:
+    """
+    Computes exact change in total route distance Delta D = D(R') - D(R) in O(1) time
+    when moving customer at index k to forward position j (where 1 <= j < k).
+    Supports:
+      - Adjacent forward relocation (j == k - 1)
+      - Non-adjacent forward relocation (j < k - 1)
+      - Last-stop relocation (k == len(route) - 1)
+      - Both return_to_depot=False and return_to_depot=True
+    """
+    n = len(route)
+    if not (1 <= j < k < n):
+        raise ValueError(f"Invalid relocation indices: j={j}, k={k} for route of length {n}")
+
+    vk = route[k]
+    v_prev_k = route[k - 1]
+    v_next_k = route[k + 1] if k + 1 < n else (route[0] if return_to_depot else None)
+
+    if j == k - 1:
+        # Adjacent move: vk swapped with v_prev_k
+        v_prev2 = route[k - 2]
+        delta_d = (
+            - get_edge_distance(instance, v_prev2, v_prev_k)
+            - get_edge_distance(instance, v_prev_k, vk)
+            + get_edge_distance(instance, v_prev2, vk)
+            + get_edge_distance(instance, vk, v_prev_k)
+        )
+        if v_next_k is not None:
+            delta_d += (
+                - get_edge_distance(instance, vk, v_next_k)
+                + get_edge_distance(instance, v_prev_k, v_next_k)
+            )
+    else:
+        # Non-adjacent forward move: vk inserted between v_prev_j and vj
+        vj = route[j]
+        v_prev_j = route[j - 1]
+        delta_d = (
+            - get_edge_distance(instance, v_prev_j, vj)
+            - get_edge_distance(instance, v_prev_k, vk)
+            + get_edge_distance(instance, v_prev_j, vk)
+            + get_edge_distance(instance, vk, vj)
+        )
+        if v_next_k is not None:
+            delta_d += (
+                - get_edge_distance(instance, vk, v_next_k)
+                + get_edge_distance(instance, v_prev_k, v_next_k)
+            )
+
+    return delta_d
+

@@ -109,3 +109,69 @@ def test_load_official_amazon_dataset_multi_package_aggregation(tmp_path):
     assert inst.travel_times is not None
     assert inst.travel_times[("STATION_1", "STOP_A")] == 300.0
     assert inst.travel_times[("STOP_A", "STOP_B")] == 400.0
+
+def test_strict_mode_rejects_missing_or_corrupt_date(tmp_path):
+    # Missing date
+    routes_missing_date = {
+        "R_BAD_DATE": {
+            "station_code": "DLA3",
+            "departure_time_utc": "08:00:00",
+            "stops": {"STATION": {"type": "Station", "lat": 34.0, "lng": -118.0}}
+        }
+    }
+    rf = str(tmp_path / "routes_bad_date.json")
+    with open(rf, "w") as f:
+        json.dump(routes_missing_date, f)
+
+    with pytest.raises(ValueError, match="missing required field 'date_YYYY_MM_DD'"):
+        load_official_amazon_dataset(rf, strict_mode=True)
+
+    # Invalid date
+    routes_missing_date["R_BAD_DATE"]["date_YYYY_MM_DD"] = "not-a-valid-date"
+    with open(rf, "w") as f:
+        json.dump(routes_missing_date, f)
+
+    with pytest.raises(ValueError, match="invalid date_YYYY_MM_DD"):
+        load_official_amazon_dataset(rf, strict_mode=True)
+
+def test_strict_mode_rejects_missing_or_corrupt_departure(tmp_path):
+    routes_bad_dep = {
+        "R_BAD_DEP": {
+            "date_YYYY_MM_DD": "2021-05-01",
+            "station_code": "DLA3",
+            "stops": {"STATION": {"type": "Station", "lat": 34.0, "lng": -118.0}}
+        }
+    }
+    rf = str(tmp_path / "routes_bad_dep.json")
+    with open(rf, "w") as f:
+        json.dump(routes_bad_dep, f)
+
+    with pytest.raises(ValueError, match="missing required field 'departure_time_utc'"):
+        load_official_amazon_dataset(rf, strict_mode=True)
+
+    routes_bad_dep["R_BAD_DEP"]["departure_time_utc"] = "invalid_time_string"
+    with open(rf, "w") as f:
+        json.dump(routes_bad_dep, f)
+
+    with pytest.raises(ValueError, match="unparseable departure_time_utc"):
+        load_official_amazon_dataset(rf, strict_mode=True)
+
+def test_strict_mode_rejects_missing_station_depot(tmp_path):
+    routes_no_depot = {
+        "R_NO_DEPOT": {
+            "date_YYYY_MM_DD": "2021-05-01",
+            "departure_time_utc": "08:00:00",
+            "station_code": "DLA3",
+            "stops": {
+                "CUST1": {"type": "Dropoff", "lat": 34.1, "lng": -118.1},
+                "CUST2": {"type": "Dropoff", "lat": 34.2, "lng": -118.2}
+            }
+        }
+    }
+    rf = str(tmp_path / "routes_no_depot.json")
+    with open(rf, "w") as f:
+        json.dump(routes_no_depot, f)
+
+    with pytest.raises(ValueError, match="does not define a Station depot stop"):
+        load_official_amazon_dataset(rf, strict_mode=True)
+

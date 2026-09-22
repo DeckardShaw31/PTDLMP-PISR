@@ -142,15 +142,29 @@ def load_official_amazon_dataset(
     instances: Dict[str, RouteInstance] = {}
 
     for route_id, r_info in routes_raw.items():
-        date_str = r_info.get("date_YYYY_MM_DD", "2021-01-01")
+        date_str = r_info.get("date_YYYY_MM_DD")
+        if not date_str:
+            if strict_mode:
+                raise ValueError(f"Strict mode: Route '{route_id}' is missing required field 'date_YYYY_MM_DD'.")
+            date_str = "2021-01-01"
+
         try:
-            route_date = datetime.strptime(date_str, "%Y-%m-%d").date()
-        except Exception:
+            route_date = datetime.strptime(str(date_str).strip(), "%Y-%m-%d").date()
+        except Exception as e:
+            if strict_mode:
+                raise ValueError(f"Strict mode: Route '{route_id}' has invalid date_YYYY_MM_DD '{date_str}': {e}") from e
             route_date = date(2021, 1, 1)
 
-        dep_time_str = r_info.get("departure_time_utc", "08:00:00")
+        dep_time_str = r_info.get("departure_time_utc")
+        if not dep_time_str:
+            if strict_mode:
+                raise ValueError(f"Strict mode: Route '{route_id}' is missing required field 'departure_time_utc'.")
+            dep_time_str = "08:00:00"
+
         dep_time = parse_iso_or_time_string(dep_time_str, route_date)
         if dep_time is None:
+            if strict_mode:
+                raise ValueError(f"Strict mode: Route '{route_id}' has unparseable departure_time_utc '{dep_time_str}'.")
             dep_time = datetime.combine(route_date, time(8, 0, 0))
 
         stops_dict: Dict[str, Stop] = {}
@@ -232,6 +246,8 @@ def load_official_amazon_dataset(
             stops_dict[stop_id] = stop_obj
 
         if depot_id is None:
+            if strict_mode:
+                raise ValueError(f"Strict mode: Route '{route_id}' does not define a Station depot stop.")
             # Fallback: create or find station
             for sid, sobj in stops_dict.items():
                 if "station" in sid.lower() or "depot" in sid.lower():
