@@ -109,3 +109,23 @@ def test_end_to_end_prediction_pipeline():
     assert "brier_score" in metrics
     assert 0.0 <= metrics["brier_score"] <= 1.0
     assert 0.0 <= metrics["roc_auc"] <= 1.0
+
+def test_route_clustered_statistics():
+    from src.evaluation.statistics import compute_route_clustered_statistics
+    # Construct mock factorial DataFrame with 3 routes
+    rows = []
+    for r in ["R1", "R2", "R3"]:
+        for b in [0.1, 0.2]:
+            for d in [0.0, 0.05]:
+                rows.append({"route_id": r, "budget": b, "delta": d, "policy": "RA", "delta_tt": 50.0})
+                rows.append({"route_id": r, "budget": b, "delta": d, "policy": "AB", "delta_tt": 48.0})
+                rows.append({"route_id": r, "budget": b, "delta": d, "policy": "RB", "delta_tt": 10.0})
+    df_runs = pd.DataFrame(rows)
+
+    stats_res = compute_route_clustered_statistics(df_runs, target_metric="delta_tt", base_policy="RA", comparison_policies=["AB", "RB"])
+    assert "AB" in stats_res
+    assert "RB" in stats_res
+    assert stats_res["AB"]["n_routes"] == 3
+    assert stats_res["RB"]["mean_diff"] == 40.0
+    assert "p_holm_bonferroni" in stats_res["AB"]
+

@@ -1,65 +1,77 @@
-# Scientific Evaluation Report: Empirical Assessment of PTDLMP-PISR on Official Amazon Challenge Dataset
+# Scientific Evaluation Report: Exploratory Empirical Assessment of PTDLMP-PISR on Amazon Challenge Cohort
 
 **Date:** 2026-09-22  
-**Evaluation Scope:** Official Amazon Last Mile Routing Challenge dataset (`code/data/raw/`), chronological ML prediction pipeline (RQ1), and large-scale held-out route resequencing benchmark with paired statistical inference (RQ2).  
+**Evaluation Scope:** Exploratory evaluation on a 13-route cohort of the official Amazon Last Mile Routing Research Challenge dataset (`code/data/raw/`), chronological ML prediction pipeline (RQ1), and held-out route resequencing benchmark with cell-level and route-clustered statistical inference (RQ2).  
 **Associated Artifacts:**
 - Raw factorial runs: `code/outputs/routing_benchmark_runs.csv` (288 runs across held-out Amazon routes)
 - Summary statistics: `code/outputs/benchmark_summary.json`
 - Clarke-Wright robustness runs: `code/outputs/robustness_clark_wright_runs.csv`
 - RQ1 prediction metrics: `code/outputs/rq1_prediction_results.json`
+- Dataset Checksums: `code/data/raw/` (verified via SHA-256)
 
 ---
 
 ## Executive Summary & Scientific Verdict
 
-This report provides the complete, rigorous empirical evaluation of the **Prediction-Informed Selective Route Resequencing (PISR)** framework executed directly on the **official Amazon Last Mile Routing Research Challenge dataset** (downloaded from AWS Open Data). Following the strict data contract, chronological splitting, and leakage guard requirements specified in `design.md`:
+This report presents an empirical evaluation of the **Prediction-Informed Selective Route Resequencing (PISR)** framework executed on a 13-route representative cohort from the **Amazon Last Mile Routing Research Challenge dataset** (AWS Open Data, licensed under CC BY-NC 4.0). Adhering to strict chronological splitting, feature leakage guards, and route-clustered statistical testing:
 
-1. **RQ1 (Predictability of Promised Delivery Lateness)**:
-   - Evaluated on **2,038 customer delivery stops** across 12 calendar dates in Chicago (`DCH4`), Pasadena (`DLA7`), and Seattle (`DSE5`), with a 50.34% baseline lateness prevalence.
-   - Using strictly ex-ante features available prior to vehicle departure ($t \le \text{decision\_time}$), an ex-ante Random Forest model achieved an out-of-sample **PR-AUC of 0.610** (baseline prevalence 50.3%), **ROC-AUC of 0.547**, and calibrated **Brier score of 0.2445** (ECE = 0.0203) under strict chronological separation (Train: 60%, Val: 20%, Test: 20%).
+1. **RQ1 (Predictability of Promised Delivery Lateness Proxy)**:
+   - Evaluated on **2,038 drop-off delivery stops** (2,051 total stops including depots) across 12 calendar dates from **7 station codes** (`DBO2`, `DCH4`, `DLA7`, `DLA8`, `DLA9`, `DSE4`, `DSE5`).
+   - *Label Definition*: The public Amazon Challenge dataset does not provide observed customer-level delivery completion timestamps. Consequently, ground-truth delivery lateness is constructed as a **route-propagated time-window violation proxy** computed by propagating the driver's actual sequence through the official historical average travel-time matrix and planned service durations. Base lateness prevalence is 50.34%.
+   - *Model Selection*: Based strictly on **validation set criteria** (chronological split), **Logistic Regression** is the superior model, achieving a validation Brier score of **0.2387** (vs. 0.2461 for Random Forest), validation log loss of **0.6640** (vs. 0.6848), validation ECE of **0.0159** (vs. 0.1293), and validation ROC-AUC of **0.5327** (vs. 0.4920). On the held-out test cohort, Logistic Regression achieves ROC-AUC = 0.595, PR-AUC = 0.596, and Brier score = 0.2404.
 2. **RQ2 (Routing Effectiveness & Policy Comparison)**:
-   - Evaluated across **288 factorial runs** on held-out test routes spanning budgets $B \in \{5\%, 10\%, 20\%, 30\%\}$ and distance tolerances $\delta \in \{0\%, 2\%, 5\%, 10\%\}$.
+   - Evaluated across **288 factorial runs** on 3 held-out test routes (`DBO2`, `DSE4`, and `DSE5`) spanning budgets $B \in \{5\%, 10\%, 20\%, 30\%\}$ and distance tolerances $\delta \in \{0\%, 2\%, 5\%, 10\%\}$.
    - **Proposition 1 Monotonicity**: Verified in 100% of runs ($\min \Delta TT \geq 0.0000$ min, exactly 0 violations). Resequencing never degraded route performance.
-   - **Hard Feasibility**: 100% of final routes passed the independent validator (no subtours, no duplicated/dropped customers, depot departure/return intact).
-3. **Core Hypothesis Resolution: Does RA Outperform AB, RB, and Heuristics?**
-   - **RA vs. RB (Pure Risk)**: RA achieves a **+1,158.64 min** higher tardiness reduction ($p < 0.0001$, paired $t = 18.576$; $p < 0.0001$, Wilcoxon). **RA categorically outperforms RB.** Pure machine-learning risk targeting selects stops that are geometrically trapped, reducing tardiness by only +294.45 min compared to RA's +1,453.09 min.
-   - **RA vs. Slack / Deadline**: RA outperforms operational Slack by **+1,049.59 min** ($p < 0.0001$, paired $t = 11.748$) and earliest Deadline by **+1,181.05 min** ($p < 0.0001$, paired $t = 19.011$).
-   - **RA vs. Random**: RA outperforms Random targeting by **+1,144.12 min** ($p < 0.0001$, paired $t = 17.209$).
-   - **RA vs. AB (Pure Actionability)**: RA does **NOT statistically significantly outperform AB** (mean difference: $+8.69$ min, 95% CI: $[-3.06, +21.93]$, paired $t = 1.371$, $p = 0.1768$; Wilcoxon $p = 0.1395$).
-   - **Scientific Insight**: Actionability score $g_i$ measures the exact schedule tardiness savings realizable by an admissible forward move. In a single-vehicle resequencing context, $g_i$ captures the overwhelming majority of the optimization headroom. Weighting by predicted risk $p_i$ provides a sensible tie-breaker without aggregate performance penalty, but does not provide a statistically significant advantage over pure $g_i$.
+   - **Hard Feasibility**: 100% of final routes passed the independent validator (no subtours, no duplicated/dropped customers, depot departure preserved).
+3. **Core Hypothesis Resolution & Statistical Inference**:
+   - **Cell-Level vs. Route-Clustered Tests**: Cell-level tests ($N=48$ cells) yield nominal $p < 0.0001$ for comparisons against heuristics. However, treating repeated $(B, \delta)$ cells as independent introduces pseudo-replication. When clustering at the route level ($N=3$ independent held-out routes):
+     - **RA vs. RB (Pure Risk)**: Mean diff = **+1,158.64 min**, unadjusted $p = 0.0227$. Pure risk targeting selects stops that are geographically inaccessible, squandering limited relocation capacity.
+     - **RA vs. Slack**: Mean diff = **+1,049.59 min**, unadjusted $p = 0.0851$.
+     - **RA vs. Deadline**: Mean diff = **+1,181.05 min**, unadjusted $p = 0.0208$.
+     - **RA vs. Random**: Mean diff = **+1,144.12 min**, unadjusted $p = 0.0270$.
+     - **RA vs. AB (Pure Actionability)**: Mean diff = **+8.69 min**, unadjusted $p = 0.1730$.
+   - **Multiple Testing Correction**: Under Holm-Bonferroni correction across the 5 policy comparisons, none of the differences reach formal significance at $\alpha = 0.05$ (adjusted $p \in [0.0908, 0.3460]$) due to the limited degrees of freedom ($N=3$ routes). While the directional effect sizes are large (>1,000 minutes saved), establishing formal statistical significance under route clustering requires expanding the held-out sample to $N \ge 20$ independent routes.
+   - **Scientific Insight**: Actionability score $g_i$ captures virtually all single-vehicle schedule headroom. Weighting by predicted risk ($p_i \cdot g_i$) provides a sensible tie-breaker without degrading performance, but does not yield a statistically significant advantage over pure $g_i$ alone in this single-vehicle setting.
 
 ---
 
 ## 1. RQ1: Chronological ML Prediction Pipeline Results
 
 ### Experimental Setup
-- **Dataset**: Official Amazon Challenge files (`code/data/raw/`): 13 routes, 2,051 customer stops, 3,129 packages across 12 calendar dates.
-- **Leakage Guard**: Enforced before training. Only ex-ante features available at vehicle departure time $t \le \text{decision\_time}$ were utilized:
+- **Dataset**: Official Amazon Challenge cohort (`code/data/raw/`): 13 routes, 2,051 total stops (2,038 drop-off stops), 3,129 packages across 12 calendar dates from 7 distribution centers (`DBO2`, `DCH4`, `DLA7`, `DLA8`, `DLA9`, `DSE4`, `DSE5`).
+- **Target Label Proxy**: Route-propagated time-window violation indicator derived from actual driver sequence and historical average travel times.
+- **Leakage Guard**: Enforced before model fitting. Only ex-ante features available at vehicle departure time $t \le \text{departure\_time}$ were utilized:
   - Geographic: distance to depot, 2 km local stop density.
   - Operational: planned service seconds, package volume ($\text{cm}^3$), package count at stop.
   - Route context: total route stops, total planned route service minutes, departure hour, day of week.
   - Deadline slack: time until promised delivery deadline ($\tau_i - \text{departure\_time}$).
 - **Chronological Split**:
   - **Train**: 1,223 stops across earliest 6 dates (60%).
-  - **Validation (Calibration)**: 408 stops across next 3 dates (20%).
-  - **Test (Held-out)**: 407 stops across latest 3 dates (20%).
-- **Probability Calibration**: Platt scaling (logistic calibration) fitted strictly on validation split probabilities to optimize Brier score.
+  - **Validation (Model Selection & Calibration)**: 408 stops across next 3 dates (20%).
+  - **Test (Held-out Evaluation)**: 407 stops across latest 3 dates (20%).
 
-### Test Cohort Performance
+### Model Selection on Validation Split
 
-| Model | ROC-AUC | PR-AUC | Brier Score | Log Loss | Expected Calibration Error (ECE) |
+| Model | Validation ROC-AUC | Validation PR-AUC | Validation Brier Score | Validation Log Loss | Validation ECE |
 |---|---:|---:|---:|---:|---:|
-| **Logistic Regression** | **0.595** | **0.596** | **0.2404** | **0.6704** | **0.0095** |
-| **Random Forest** | **0.547** | **0.610** | **0.2445** | **0.6819** | **0.0203** |
+| **Logistic Regression (Selected)** | **0.533** | 0.515 | **0.2387** | **0.6640** | **0.0159** |
+| **Random Forest** | 0.492 | **0.538** | 0.2461 | 0.6848 | 0.1293 |
 
-*Conclusion for RQ1*: Delivery lateness risk is predictable from ex-ante features prior to departure without data leakage, yielding well-calibrated probabilities (ECE $\le 0.02$) suitable for scaling actionability scores.
+*Decision*: Logistic Regression demonstrates superior probability calibration (ECE = 0.0159 vs. 0.1293), lower Brier score, and lower log loss on validation data, making it the mathematically preferred model for probability estimation.
+
+### Test Cohort Performance (Out-of-Sample)
+
+| Model | Test ROC-AUC | Test PR-AUC | Test Brier Score | Test Log Loss | Test ECE |
+|---|---:|---:|---:|---:|---:|
+| **Logistic Regression** | **0.595** | 0.596 | **0.2404** | **0.6704** | **0.0095** |
+| **Random Forest** | 0.547 | **0.610** | 0.2445 | 0.6819 | 0.0203 |
 
 ---
 
-## 2. RQ2: Empirical Routing Benchmark on Official Held-Out Amazon Routes
+## 2. RQ2: Empirical Routing Benchmark on Held-Out Amazon Routes
 
 ### Factorial Evaluation Matrix
-- **Routes Evaluated**: 3 held-out test routes (407 customer stops) across held-out test dates.
+- **Held-Out Test Routes**: 3 independent routes spanning 407 drop-off delivery stops across test stations `DBO2`, `DSE4`, and `DSE5`.
 - **Factors**:
   - Baseline route: Nearest Neighbor ($R^0$).
   - Targeting policies: RA, AB, RB, Slack, Deadline, Random.
@@ -80,24 +92,22 @@ This report provides the complete, rigorous empirical evaluation of the **Predic
 
 ---
 
-## 3. Paired Statistical Hypothesis Tests
-
-To definitively test whether RA statistically outperforms competing policies, paired difference tests were performed across all corresponding $(route, \delta, B)$ experimental conditions:
+## 3. Statistical Inference: Cell-Level vs. Route-Clustered Hypothesis Tests
 
 $$\Delta TT(\text{RA}) - \Delta TT(\text{Competitor})$$
 
-| Comparison | Mean Difference (min) | 95% Confidence Interval | Paired $t$-statistic | $p$-value ($t$-test) | $p$-value (Wilcoxon) | Statistically Significant? |
-|---|---:|:---:|---:|---:|---:|:---:|
-| **RA vs. AB** | **+8.69 min** | **[-3.06, +21.93]** | **+1.371** | **0.1768** | **0.1395** | **NO** ($p > 0.05$) |
-| **RA vs. RB** | **+1,158.64 min** | **[+1,043.49, +1,270.88]** | **+18.576** | **< 0.0001** | **< 0.0001** | **YES** |
-| **RA vs. Slack** | **+1,049.59 min** | **[+880.44, +1,216.10]** | **+11.748** | **< 0.0001** | **< 0.0001** | **YES** |
-| **RA vs. Deadline** | **+1,181.05 min** | **[+1,064.95, +1,302.08]** | **+19.011** | **< 0.0001** | **< 0.0001** | **YES** |
-| **RA vs. Random** | **+1,144.12 min** | **[+1,022.29, +1,272.24]** | **+17.209** | **< 0.0001** | **< 0.0001** | **YES** |
+| Comparison | Mean Diff (min) | 95% Confidence Interval | Cell-Level $p$ ($N=48$) | Route-Clustered $t$ ($N=3$) | Route-Clustered $p$ (unadjusted) | Holm-Bonferroni Adj. $p$ | Significant at $\alpha=0.05$? |
+|---|---:|:---:|---:|---:|---:|---:|:---:|
+| **RA vs. AB** | **+8.69 min** | [-3.06, +21.93] | 0.1768 | +2.080 | 0.1730 | 0.3460 | **NO** |
+| **RA vs. RB** | **+1,158.64 min** | [+1,043.49, +1,270.88] | < 0.0001 | +6.526 | 0.0227 | 0.0908 | **Marginal** (unadjusted) |
+| **RA vs. Slack** | **+1,049.59 min** | [+880.44, +1,216.10] | < 0.0001 | +3.205 | 0.0851 | 0.0908 | **NO** |
+| **RA vs. Deadline** | **+1,181.05 min** | [+1,064.95, +1,302.08] | < 0.0001 | +6.825 | 0.0208 | 0.1040 | **Marginal** (unadjusted) |
+| **RA vs. Random** | **+1,144.12 min** | [+1,022.29, +1,272.24] | < 0.0001 | +5.967 | 0.0270 | 0.0908 | **Marginal** (unadjusted) |
 
-### Key Scientific Takeaways:
-1. **The Critical Failure of Pure Risk Targeting (RB)**: RB achieves less than one-fourth the tardiness reduction of RA (+294.45 min vs. +1,453.09 min, $p < 0.0001$). Machine learning models without spatial routing awareness select stops that are geographically inaccessible, squandering limited relocation capacity ($B$).
-2. **Actionability Parity**: AB and RA are statistically equivalent ($p = 0.1768$). Actionability $g_i$ measures the exact schedule tardiness savings realizable by an admissible forward move, capturing nearly all optimization headroom.
-3. **PISR Rescues Heuristics**: Both RA and AB dramatically outperform operational slack (+403.50 min) and earliest deadline (+272.05 min) by over 1,000 minutes of saved delay.
+### Key Methodological Takeaways:
+1. **Dangers of Pseudo-Replication**: Cell-level pooling treats repeated runs on the same route as independent, artificially inflating statistical power ($p < 0.0001$). Route clustering correctly identifies the independent experimental unit ($N=3$), reflecting the true sampling uncertainty.
+2. **Substantive vs. Statistical Significance**: Although the magnitude of tardiness reduction for RA over RB (+1,158 min) and Deadline (+1,181 min) is operationally dramatic, statistical confirmation after family-wise error rate control requires expanding the route sample ($N \ge 20$).
+3. **Equivalence of RA and AB**: Both at the cell level ($p = 0.1768$) and route-clustered level ($p = 0.1730$), RA and AB are statistically indistinguishable. Actionability $g_i$ carries the primary optimization signal.
 
 ---
 
@@ -111,13 +121,13 @@ $$\Delta TT(\text{RA}) - \Delta TT(\text{Competitor})$$
 | **Runs starting with 0 baseline tardiness** | **0 of 288 (0.0%)** | Realistic operational stress | **CONFIRMED** |
 
 ### Clarification on $\Delta NL < 0$:
-In exactly 9 factorial runs, advancing a high-tardiness customer saved substantial total minutes of delay ($\Delta TT > 0$), but pushed downstream customers slightly past their deadline window, temporarily increasing total late deliveries by 1 ($\Delta NL = -1$). This empirically validates the theoretical remark in Section 3 of the manuscript and confirms the non-myopic nature of the schedule propagation engine.
+In 9 factorial runs, advancing a customer with large tardiness saved substantial delay minutes ($\Delta TT > 0$), but pushed downstream customers slightly past their deadline window, increasing total late deliveries by 1 ($\Delta NL = -1$). This empirically illustrates the distinction between the smooth continuous objective (total tardiness) and the non-smooth step objective (lateness count).
 
 ---
 
 ## 5. Robustness Analysis: Clarke-Wright Savings Baseline
 
-To ensure findings are not an artifact of Nearest Neighbor construction, all held-out Amazon routes were also evaluated using the **Clarke-Wright Savings heuristic** as $R^0$ ($B = 0.20$, $\delta = 0.05$):
+Under Clarke-Wright baseline tours ($B = 0.20$, $\delta = 0.05$):
 
 | Policy | Avg $\Delta TT$ (min) | Avg TT Reduction (%) | Avg $\Delta NL$ | Avg Distance Increase (%) |
 |---|---:|---:|---:|---:|
@@ -126,15 +136,11 @@ To ensure findings are not an artifact of Nearest Neighbor construction, all hel
 | **RB** | **+473.48 min** | **3.29%** | **+0.67** | +3.86% |
 | **Slack** | **+938.52 min** | **6.03%** | **+2.67** | +4.59% |
 
-*Finding*: Under Clarke-Wright baseline tours, PISR eliminates nearly **2,000 minutes of tardiness (14.3% reduction)** and saves **7 late deliveries per route** while extending route distance by only 4.6%. The superiority over RB and Slack remains robust.
-
 ---
 
-## 6. Guidance for Manuscript Revision & Defense
+## 6. Recommendations for Manuscript Revision (`main.tex`)
 
-Based on this empirical evidence from the official Amazon dataset, the following updates are recommended for `PTDLMP manuscript_09122026.tex`:
-
-1. **Acknowledge RA and AB Parity**: State accurately that while RA categorically outperforms pure risk targeting (RB, $p < 0.0001$), operational slack ($p < 0.0001$), and random targeting ($p < 0.0001$), it achieves parity with pure actionability (AB, $p = 0.1768$).
-2. **Highlight the Indispensability of Actionability ($g_i$)**: Frame $g_i$ as the essential spatial filter that prevents predictive machine learning from selecting futile, geographically impossible interventions.
-3. **Cite the Official Amazon Evaluation**: Present the 288 held-out Amazon Challenge runs, 2,051 customer stops, and 3,129 packages from AWS Open Data as the definitive empirical benchmark.
-4. **Document the 9 Cases of $\Delta NL < 0$**: Present these 9 cases as empirical evidence supporting the theoretical distinction between minimizing total tardiness (smooth objective) and minimizing customer lateness count (step-function objective).
+1. **Avoid Overstating Statistical Claims**: Explicitly state that while RA achieves large operational reductions over RB (+1,158 min) and Slack (+1,050 min), route-clustered testing on $N=3$ test routes yields marginal unadjusted significance ($p \approx 0.02 - 0.08$) that does not survive Holm-Bonferroni correction.
+2. **Report Label Construction Transparently**: Disclose that customer arrival times in the public Amazon Challenge are route-propagated proxies based on historical travel-time matrices.
+3. **Emphasize Actionability ($g_i$)**: Frame actionability as the indispensable spatial filter that prevents pure ML models from selecting futile moves.
+4. **Include Dataset Attribution & License**: Add formal citation of Merchán et al. (2021) and the CC BY-NC 4.0 license notice.

@@ -19,3 +19,19 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+---
+
+### Dataset License & Attribution Notice
+
+The Amazon Last-Mile Routing Research Challenge dataset utilized in this repository
+is provided by Amazon.com, Inc. and its affiliates under the Creative Commons
+Attribution-NonCommercial 4.0 International (CC BY-NC 4.0) License:
+https://creativecommons.org/licenses/by-nc/4.0/
+
+Citation:
+Merchán, D., Pachon, J., Arora, J., et al. (2021).
+"2021 Amazon Last-Mile Routing Research Challenge Dataset."
+Amazon.com, Inc. or its affiliates. Available via AWS Open Data:
+https://registry.opendata.aws/amazon-last-mile-challenges/
+
