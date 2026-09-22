@@ -92,8 +92,8 @@ def run_rq1_experiment(
 if __name__ == "__main__":
     base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
     raw_dir = os.path.join(base_dir, "data", "raw")
-    challenge_dir = os.path.join(base_dir, "data", "challenge")
-    d_dir = raw_dir if os.path.exists(os.path.join(raw_dir, "route_data.json")) else challenge_dir
+    if not os.path.exists(os.path.join(raw_dir, "route_data.json")):
+        raise FileNotFoundError(f"Official Amazon Challenge dataset not found in '{raw_dir}'.")
     o_dir = os.path.join(base_dir, "outputs")
-    print(f"[RQ1] Selected dataset directory: {d_dir}")
-    run_rq1_experiment(d_dir, o_dir)
+    print(f"[RQ1] Selected official dataset directory: {raw_dir}")
+    run_rq1_experiment(raw_dir, o_dir)

@@ -37,7 +37,8 @@ PTDLMP-PISR/
 │   │   │   ├── package_data.json     # 3,129 packages with dimensions and service times
 │   │   │   ├── travel_times.json     # 37,000+ directed travel-time edges
 │   │   │   └── actual_sequences.json # Official driver delivery sequences
-│   │   └── challenge/                # Secondary benchmark instances
+│   │   ├── amazon_sample_routes.json # Quick unit test fixture
+│   │   └── amazon_sample_packages.json # Quick unit test fixture
 │   ├── src/
 │   │   ├── data/
 │   │   │   ├── schemas.py            # Canonical dataclasses (Stop, RouteInstance, etc.)

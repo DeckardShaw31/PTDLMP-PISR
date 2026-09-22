@@ -21,8 +21,8 @@ from src.evaluation.tables import format_markdown_table, format_latex_table
 def run_benchmark_experiments():
     base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
     raw_dir = os.path.join(base_dir, "data", "raw")
-    challenge_dir = os.path.join(base_dir, "data", "challenge")
-    d_dir = raw_dir if os.path.exists(os.path.join(raw_dir, "route_data.json")) else challenge_dir
+    if not os.path.exists(os.path.join(raw_dir, "route_data.json")):
+        raise FileNotFoundError(f"Official Amazon Challenge dataset not found in '{raw_dir}'.")
     o_dir = os.path.join(base_dir, "outputs")
     os.makedirs(o_dir, exist_ok=True)
 
