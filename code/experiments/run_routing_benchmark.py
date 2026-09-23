@@ -2,9 +2,15 @@ import os
 import sys
 import json
 import time
+import hashlib
+import subprocess
+import platform
+from datetime import datetime, timezone
 from typing import Dict, List, Tuple, Any, Optional
 import numpy as np
 import pandas as pd
+import sklearn
+import scipy
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -19,6 +25,13 @@ from src.routing.validator import validate_route
 from src.evaluation.statistics import compute_paired_statistics, compute_route_clustered_statistics
 from src.evaluation.tables import format_markdown_table, format_latex_table
 
+def compute_file_sha256(filepath: str) -> str:
+    h = hashlib.sha256()
+    with open(filepath, "rb") as f:
+        while chunk := f.read(65536):
+            h.update(chunk)
+    return h.hexdigest()
+
 def run_benchmark_experiments(
     raw_dir: Optional[str] = None,
     output_dir: Optional[str] = None,
@@ -27,7 +40,7 @@ def run_benchmark_experiments(
     deltas: Optional[List[float]] = None,
     policies: Optional[List[str]] = None,
     random_seeds: Optional[List[int]] = None,
-    default_sla_hours: Optional[float] = 4.0,
+    default_sla_hours: Optional[float] = None,
     save_outputs: bool = True
 ) -> Dict[str, Any]:
     base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -39,6 +52,9 @@ def run_benchmark_experiments(
         output_dir = os.path.join(base_dir, "outputs")
     if save_outputs:
         os.makedirs(output_dir, exist_ok=True)
+
+    start_time_iso = datetime.now(timezone.utc).isoformat()
+    t_benchmark_start = time.perf_counter()
 
     print(f"[Benchmark] Loading Amazon routes from '{raw_dir}' (default_sla_hours={default_sla_hours})...")
     instances = load_official_amazon_dataset(raw_dir, strict_mode=True, default_sla_hours=default_sla_hours)
@@ -125,7 +141,10 @@ def run_benchmark_experiments(
                             ranked = rank_candidates(inst, base_route, policy="Random", g_scores=g_scores, random_seed=s_seed)
                             selected = select_intervention_set(ranked, budget_b=B, num_customers=num_customers)
                             final_r, logs = selective_forward_relocation(inst, base_route, selected, delta=delta)
-                            v_res = validate_route(inst, final_r, baseline_route=base_route, delta=delta)
+                            v_res = validate_route(
+                                inst, final_r, baseline_route=base_route, delta=delta,
+                                require_promised_times=(default_sla_hours is not None)
+                            )
                             sched_fin = propagate_schedule(inst, final_r)
                             seed_runtime_sec = time.perf_counter() - t_seed_start
 
@@ -188,7 +207,10 @@ def run_benchmark_experiments(
                         ranked = rank_candidates(inst, base_route, policy=pol, g_scores=g_scores)
                         selected = select_intervention_set(ranked, budget_b=B, num_customers=num_customers)
                         final_r, logs = selective_forward_relocation(inst, base_route, selected, delta=delta)
-                        v_res = validate_route(inst, final_r, baseline_route=base_route, delta=delta)
+                        v_res = validate_route(
+                            inst, final_r, baseline_route=base_route, delta=delta,
+                            require_promised_times=(default_sla_hours is not None)
+                        )
                         sched_fin = propagate_schedule(inst, final_r)
                         pol_runtime_sec = time.perf_counter() - t_pol_start
 
@@ -240,7 +262,10 @@ def run_benchmark_experiments(
             ranked = rank_candidates(inst, cw_route, policy=pol, g_scores=g_scores)
             selected = select_intervention_set(ranked, budget_b=B, num_customers=num_customers)
             final_r, logs = selective_forward_relocation(inst, cw_route, selected, delta=delta)
-            v_res = validate_route(inst, final_r, baseline_route=cw_route, delta=delta)
+            v_res = validate_route(
+                inst, final_r, baseline_route=cw_route, delta=delta,
+                require_promised_times=(default_sla_hours is not None)
+            )
             sched_fin = propagate_schedule(inst, final_r)
             cw_pol_runtime = time.perf_counter() - t_cw_pol
 
@@ -414,7 +439,46 @@ def run_benchmark_experiments(
                 ])
             print(format_markdown_table(cw_headers, cw_rows))
 
+    end_time_iso = datetime.now(timezone.utc).isoformat()
+    total_runtime_seconds = time.perf_counter() - t_benchmark_start
+
+    try:
+        commit_sha = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True, cwd=base_dir).strip()
+    except Exception:
+        commit_sha = "unknown"
+
+    environment_versions = {
+        "python": platform.python_version(),
+        "scikit_learn": sklearn.__version__,
+        "pandas": pd.__version__,
+        "numpy": np.__version__,
+        "scipy": scipy.__version__,
+        "platform": platform.platform()
+    }
+
+    dataset_checksums = {}
+    if os.path.exists(raw_dir):
+        for fname in sorted(os.listdir(raw_dir)):
+            if fname.endswith(".json"):
+                dataset_checksums[fname] = compute_file_sha256(os.path.join(raw_dir, fname))
+
+    output_checksums = {}
+    if save_outputs:
+        for fname in ["routing_benchmark_runs.csv", "random_seed_runs.csv", "robustness_clark_wright_runs.csv"]:
+            fpath = os.path.join(output_dir, fname)
+            if os.path.exists(fpath):
+                output_checksums[fname] = compute_file_sha256(fpath)
+
     summary_payload = {
+        "run_metadata": {
+            "run_start_time": start_time_iso,
+            "run_end_time": end_time_iso,
+            "total_runtime_seconds": round(total_runtime_seconds, 2),
+            "commit_sha": commit_sha,
+            "environment_versions": environment_versions,
+            "dataset_checksums": dataset_checksums,
+            "output_checksums": output_checksums
+        },
         "model_selection": {
             "primary_model": "logistic",
             "selection_protocol": "predeclared_primary",

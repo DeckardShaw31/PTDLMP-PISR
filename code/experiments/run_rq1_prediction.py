@@ -16,7 +16,7 @@ from src.evaluation.tables import format_markdown_table, format_latex_table
 def run_rq1_experiment(
     data_dir: str,
     output_dir: str,
-    default_sla_hours: Optional[float] = 4.0
+    default_sla_hours: Optional[float] = None
 ) -> Tuple[RiskPredictionPipeline, Dict[str, Any], pd.DataFrame]:
     print(f"[RQ1] Loading Amazon dataset from '{data_dir}' (default_sla_hours={default_sla_hours})...")
     instances = load_official_amazon_dataset(data_dir, strict_mode=True, default_sla_hours=default_sla_hours)

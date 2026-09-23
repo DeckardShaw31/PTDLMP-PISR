@@ -42,14 +42,14 @@ def evaluate_predictions(y_true: np.ndarray, y_prob: np.ndarray) -> Dict[str, fl
             "roc_auc": 0.5,
             "pr_auc": float(np.mean(y_true)),
             "brier_score": float(brier_score_loss(y_true, y_prob)),
-            "log_loss": float(log_loss(y_true, y_prob)),
+            "log_loss": float(log_loss(y_true, y_prob, labels=[0, 1])),
             "ece": compute_expected_calibration_error(y_true, y_prob)
         }
 
     roc_auc = float(roc_auc_score(y_true, y_prob))
     pr_auc = float(average_precision_score(y_true, y_prob))
     brier = float(brier_score_loss(y_true, y_prob))
-    ll = float(log_loss(y_true, y_prob))
+    ll = float(log_loss(y_true, y_prob, labels=[0, 1]))
     ece = compute_expected_calibration_error(y_true, y_prob)
 
     return {

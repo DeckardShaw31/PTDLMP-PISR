@@ -44,8 +44,8 @@ def create_policy_comparison_figure(benchmark_json_path: str, out_path: str):
     bars1 = ax1.bar(display_names, tt_reduction, color=colors, width=0.55, edgecolor="black", linewidth=0.8)
     ax1.set_ylabel("Total Tardiness Reduction (%)", fontsize=12, fontweight="bold")
     ax1.set_title("A. Mean Tardiness Reduction by Targeting Policy\n(Held-out Amazon Routes, 288 Factorial Runs)", fontsize=12, fontweight="bold", pad=12)
-    max_tt = max(tt_reduction) if tt_reduction else 15.0
-    ax1.set_ylim(0, max_tt * 1.3)
+    max_tt = max(tt_reduction) if (tt_reduction and max(tt_reduction) > 0) else 15.0
+    ax1.set_ylim(0, max(1.0, max_tt * 1.3))
     for bar in bars1:
         yval = bar.get_height()
         ax1.text(bar.get_x() + bar.get_width()/2.0, yval + 0.3, f"{yval:.1f}%", ha='center', va='bottom', fontsize=10, fontweight="bold")
@@ -54,8 +54,8 @@ def create_policy_comparison_figure(benchmark_json_path: str, out_path: str):
     bars2 = ax2.bar(display_names, accepted_moves, color=colors, width=0.55, edgecolor="black", linewidth=0.8)
     ax2.set_ylabel("Mean Relocations Accepted per Route", fontsize=12, fontweight="bold")
     ax2.set_title("B. Intervention Efficiency (Accepted Moves)\n(Budget B=5% to 30%, Delta=0% to 10%)", fontsize=12, fontweight="bold", pad=12)
-    max_acc = max(accepted_moves) if accepted_moves else 20.0
-    ax2.set_ylim(0, max_acc * 1.3)
+    max_acc = max(accepted_moves) if (accepted_moves and max(accepted_moves) > 0) else 20.0
+    ax2.set_ylim(0, max(1.0, max_acc * 1.3))
     for bar in bars2:
         yval = bar.get_height()
         ax2.text(bar.get_x() + bar.get_width()/2.0, yval + 0.3, f"{yval:.1f}", ha='center', va='bottom', fontsize=10, fontweight="bold")
@@ -70,7 +70,7 @@ def create_route_resequencing_map_figure(data_dir: str, out_path: str):
     Creates Figure 3: Visual inspection of route before and after Selective Forward Relocation (SFR)
     using official Amazon Challenge data.
     """
-    instances = load_official_amazon_dataset(data_dir, strict_mode=True, default_sla_hours=4.0)
+    instances = load_official_amazon_dataset(data_dir, strict_mode=True, default_sla_hours=None)
     # Select first route with active tardiness
     target_r_id = None
     target_inst = None
@@ -80,7 +80,7 @@ def create_route_resequencing_map_figure(data_dir: str, out_path: str):
     for r_id, inst in instances.items():
         base = build_nearest_neighbor_baseline(inst)
         sched = propagate_schedule(inst, base)
-        if sched.total_tardiness > 500.0:
+        if sched.total_tardiness > 50.0:
             target_r_id = r_id
             target_inst = inst
             target_base = base

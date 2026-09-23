@@ -35,7 +35,7 @@ def test_run_benchmark_experiments_smoke(tmp_path):
         deltas=[0.05],
         policies=["RA", "Random"],
         random_seeds=[42, 43],
-        default_sla_hours=4.0,
+        default_sla_hours=None,
         save_outputs=True
     )
 
@@ -60,7 +60,7 @@ def test_benchmark_reduced_grid_smoke():
     if not os.path.exists(os.path.join(raw_dir, "route_data.json")):
         pytest.skip(f"Official raw dataset not found in '{raw_dir}'")
 
-    instances = load_official_amazon_dataset(raw_dir, strict_mode=True, default_sla_hours=4.0)
+    instances = load_official_amazon_dataset(raw_dir, strict_mode=True, default_sla_hours=None)
     assert len(instances) > 0
 
     # Pick single test route
@@ -90,7 +90,7 @@ def test_benchmark_reduced_grid_smoke():
                 ranked = rank_candidates(inst, base_route, policy=pol, g_scores=g_scores, random_seed=s)
                 selected = select_intervention_set(ranked, budget_b=budget, num_customers=num_customers)
                 final_r, logs = selective_forward_relocation(inst, base_route, selected, delta=delta)
-                v_res = validate_route(inst, final_r, baseline_route=base_route, delta=delta)
+                v_res = validate_route(inst, final_r, baseline_route=base_route, delta=delta, require_promised_times=False)
                 sched_fin = propagate_schedule(inst, final_r)
                 pol_time = time.perf_counter() - t_pol
 
@@ -102,7 +102,7 @@ def test_benchmark_reduced_grid_smoke():
             ranked = rank_candidates(inst, base_route, policy=pol, g_scores=g_scores)
             selected = select_intervention_set(ranked, budget_b=budget, num_customers=num_customers)
             final_r, logs = selective_forward_relocation(inst, base_route, selected, delta=delta)
-            v_res = validate_route(inst, final_r, baseline_route=base_route, delta=delta)
+            v_res = validate_route(inst, final_r, baseline_route=base_route, delta=delta, require_promised_times=False)
             sched_fin = propagate_schedule(inst, final_r)
             pol_time = time.perf_counter() - t_pol
 
