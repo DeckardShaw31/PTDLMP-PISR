@@ -64,7 +64,7 @@ Evaluated across **288 factorial runs** on 3 held-out test routes ($B \in \{5\%,
 - **Proposition 1 Monotonicity**: Verified in 100% of runs ($\min \Delta TT = 0.0000$ min, exactly 0 violations).
 - **Distance Constraint Compliance**: Cumulative distance constraint $\Delta D \le \delta$ was respected on 100% of runs.
 - **Phenomenological Decoupling**: In 11 runs, $\Delta NL < 0$ occurred while $\Delta TT > 0$, demonstrating that continuous tardiness optimization decouples from binary threshold crossing.
-- **Sub-Second Efficiency**: Actionability precomputation requires $\sim 0.08$s, and relocation execution requires $\sim 0.25$s per route, confirming real-time viability.
+- **Computational Efficiency**: Precomputing actionability scores requires an average of $1.31$~seconds per route, while executing selective forward relocation (SFR) averages $0.26$~seconds per route (combined decision latency of $\sim 1.57$~seconds), confirming operational viability for morning dispatch staging.
 
 ---
 

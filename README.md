@@ -150,7 +150,7 @@ $$\Delta TT(\text{RA}) - \Delta TT(\text{Competitor})$$
 | **RA vs. Deadline** | **+1,145.87 min** | [+834.88, +1,414.37] | $< 0.0001$ | $0.0210$ | $0.0839$ |
 | **RA vs. Random** | **+1,118.42 min** | [+759.68, +1,299.85] | $< 0.0001$ | $0.0248$ | $0.0839$ |
 
-*Defensible Scientific Conclusion*: RA shows large operational improvements over risk-only and conventional targeting (averaging >1,000 minutes of saved tardiness), but none of the route-clustered comparisons remain statistically significant after Holm–Bonferroni correction because only three independent test routes are available ($N=3$). Formal confirmation of statistical significance under route clustering requires expanding the held-out route sample based on a prospective power analysis before writing definitive results into `main.tex`.
+*Defensible Scientific Conclusion*: Actionability drives the operational gains; risk-only targeting performs poorly; and an incremental benefit from multiplying actionability by predicted risk has not been demonstrated in this cohort. Furthermore, none of the route-clustered comparisons remain statistically significant after Holm–Bonferroni multiplicity correction ($N=3$ test routes), so the observed point differences represent exploratory empirical evidence rather than statistical confirmation. Detecting subtle performance differentials between RA and AB will require expanding the evaluation cohort based on an exploratory planning estimate of $N \approx 34$ independent routes.
 
 ---
 
