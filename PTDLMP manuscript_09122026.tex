@@ -786,72 +786,67 @@ accepted relocation may alter the service outcomes of customers other
 than the relocated customer, and a reduction in total tardiness need not
 produce an equivalent reduction in the number of late deliveries.
 
-\section{Empirical Evaluation and Numerical Experiments}\label{sec:empirical-evaluation}
+\section{Experimental Design and Computational Methodology}\label{sec:experimental-design}
 
-\subsection{Experimental Data and Operational Cohort}\label{sec:data-cohort}
-We evaluate the PISR framework on dispatch routes from the official Amazon Last Mile Routing Research Challenge dataset (AWS Open Data, licensed under CC BY-NC 4.0). The empirical cohort analyzed in this study comprises 13 dispatch routes spanning 2,051 total stops (2,038 drop-off delivery stops) and 3,129 packages across 12 calendar dates from 7 distribution centers (\texttt{DBO2}, \texttt{DCH4}, \texttt{DLA7}, \texttt{DLA8}, \texttt{DLA9}, \texttt{DSE4}, and \texttt{DSE5}).
+\subsection{Data Source and Operational Cohort Characteristics}\label{sec:data-cohort}
+The empirical evaluation of PISR is conducted on courier dispatch routes from the official Amazon Last Mile Routing Research Challenge dataset (AWS Open Data, CC BY-NC 4.0). Each route record encompasses courier dispatch sequences, stop-level geographic coordinates, package volume and service characteristics, and official historical travel-time matrices.
 
-To maintain strict empirical rigor:
+To maintain strict scientific and operational fidelity:
 \begin{enumerate}
-    \item \textbf{Target Label Definition}: The public Amazon Challenge dataset does not provide realized customer-level delivery completion timestamps. Consequently, ground-truth delivery lateness is strictly defined as a \emph{route-propagated promised-time violation proxy} computed by propagating the driver's actual sequence through the official historical average travel-time matrix and planned service durations.
-    \item \textbf{Distance Metric}: All route distances $D(R)$ and distance increments $\Delta D$ are evaluated using a \emph{Haversine straight-line distance proxy} between customer coordinates, maintaining deterministic $O(1)$ local relocation evaluation.
-    \item \textbf{Strict SLA Constraints}: The experimental pipeline enforces \texttt{default\_sla\_hours=None}, ensuring that zero synthetic deadlines are imputed. Only packages with explicit customer promised delivery times are treated as deadline-constrained.
-    \item \textbf{Zero Imputed Travel Times}: All travel times between stops are retrieved strictly from official historical travel-time matrices without artificial distance-to-time edge imputation.
+    \item \textbf{Target Lateness Proxy}: Because public dataset releases lack observed per-stop actual completion timestamps, ground-truth delivery lateness is evaluated through a \emph{route-propagated promised-time violation proxy}. The realized driver sequence is propagated through planned service durations and the official historical average travel-time matrix to compute stop completion times.
+    \item \textbf{Distance Proxy}: Route distances $D(R)$ and relocation increments $\Delta D$ are evaluated using a \emph{Haversine straight-line distance proxy} between geographic coordinates, providing consistent and deterministic $O(1)$ local edge relocation bounds.
+    \item \textbf{Zero Synthetic SLA Imputation}: The evaluation strictly enforces \texttt{default\_sla\_hours = None}. Only packages with explicit, customer-promised delivery deadlines (\texttt{time\_window.end}) are evaluated as deadline-constrained. Stops without explicit customer deadlines have zero penalty for completion time and serve as flexible buffer stops for schedule propagation.
+    \item \textbf{Unmodified Official Matrices}: Travel times between stops are queried strictly from the official historical average travel-time matrices without artificial distance-to-time edge imputation.
 \end{enumerate}
 
 \subsection{Predictive Pipeline Protocol (RQ1)}\label{sec:rq1-protocol}
 The predictive task addresses RQ1: predicting customer-level lateness risk $p_i$ prior to route departure.
 
-\paragraph{Chronological Splitting and Leakage Prevention.}
-To reflect realistic dispatch conditions and prevent temporal data leakage, observations are partitioned chronologically by calendar date:
+\paragraph{Chronological Splitting and Temporal Leakage Guard.}
+To replicate real-world operational dispatch and eliminate retrospective data leakage, observations are partitioned strictly chronologically across calendar dispatch dates:
 \begin{itemize}
-    \item \textbf{Training Block}: Earliest 7 dates (60\% of observations, 1,173 stops).
-    \item \textbf{Validation Block}: Intermediate 2 dates (20\% of observations, 331 stops).
-    \item \textbf{Held-Out Test Block}: Latest 3 dates (20\% of observations, 534 stops).
+    \item \textbf{Training Block}: Earliest calendar dispatch dates (60\% of observations).
+    \item \textbf{Validation Block}: Intermediate calendar dispatch dates (20\% of observations).
+    \item \textbf{Held-Out Test Block}: Latest calendar dispatch dates (20\% of observations).
 \end{itemize}
-A strict feature leakage guard restricts model inputs to ex-ante characteristics known prior to vehicle departure ($t \le \text{departure\_time}$): depot Haversine distance, local 2~km stop density, planned service duration, package volume, stop package count, route-level stop count, planned service minutes, departure hour, day of week, and deadline slack ($\tau_i - \text{departure\_time}$).
+Feature construction is restricted to ex-ante characteristics known at vehicle departure ($t \le \text{departure\_time}$): depot Haversine distance, local 2~km stop density, planned service duration, package volume, stop package count, route-level stop count, planned service minutes, departure hour, day of week, and deadline slack ($\tau_i - \text{departure\_time}$).
 
-\paragraph{Predeclared Probability Model and Calibration-Fit Diagnostics.}
-Logistic Regression is predeclared as the primary probability model architecture. To avoid optimistic model selection on validation data, the chronological validation block is reserved exclusively for fitting post-hoc Platt scaling (probability calibration). Predictive performance is evaluated out-of-sample on the held-out test block. Validation metrics serve as calibration-fit diagnostics rather than model-selection evidence.
+\paragraph{Predeclared Probability Model and Calibration Protocol.}
+Logistic Regression is predeclared as the primary linear probability model architecture. The chronological validation block is reserved strictly for fitting post-hoc Platt scaling (probability calibration). Validation metrics are reported as \emph{calibration-fit diagnostics} rather than model-selection evidence. Predictive performance is evaluated out-of-sample on the held-out test block. Valid predictive evaluation strictly requires that both positive (late) and negative (on-time) instances are present in validation and test splits.
 
-\subsection{Empirical Routing Benchmark Design (RQ2)}\label{sec:rq2-design}
-The routing benchmark addresses RQ2 by evaluating whether selective forward resequencing mitigates total route tardiness without violating operational capacity or route distance limits.
+\subsection{Routing Benchmark and Policy Comparison Design (RQ2 \& RQ3)}\label{sec:routing-benchmark-design}
+The routing benchmark investigates two interconnected operational questions:
+\begin{itemize}
+    \item \textbf{RQ2 (Resequencing Effectiveness)}: Can selective forward resequencing under Proposition~1 mitigate total route tardiness while respecting cumulative route-distance tolerances?
+    \item \textbf{RQ3 (Targeting Policy Comparison)}: Does risk-weighted actionability (RA: $p_i g_i$) outperform pure actionability (AB: $g_i$), pure risk (RB: $p_i$), heuristic slacks, and randomized selection?
+\end{itemize}
 
-\paragraph{Factorial Evaluation Grid.}
-Experiments are conducted across 288 factorial runs on the 3 held-out test routes (\texttt{DBO2}, \texttt{DSE4}, and \texttt{DSE5}) spanning:
+\paragraph{Factorial Evaluation Matrix.}
+The benchmark is structured across a multi-dimensional parameter grid:
 \begin{itemize}
     \item Intervention budgets: $B \in \{5\%, 10\%, 20\%, 30\%\}$.
     \item Cumulative route-distance tolerances: $\delta \in \{0\%, 2\%, 5\%, 10\%\}$.
 \end{itemize}
-Five targeting policies are compared: Risk-Actionability (RA: $p_i g_i$), Actionability-Based (AB: $g_i$), Risk-Based (RB: $p_i$), Slack-Based, and Deadline-Based, alongside a Uniform Random baseline evaluated across 10 distinct random seeds (seeds 42 to 51) per parameter cell.
+Evaluated policies include Risk-Actionability (RA: $p_i g_i$), Actionability-Based (AB: $g_i$), Risk-Based (RB: $p_i$), Slack-Based ($\tau_i - c_i(R^0)$), Deadline-Based ($\tau_i$), and a Uniform Random baseline evaluated across 10 independent random seeds per parameter cell.
 
-\paragraph{Baseline Routing Heuristics.}
-To examine heuristic robustness, baseline routes $R^0$ are constructed using:
+\paragraph{Ex-Ante Baseline Constructors.}
+To assess robustness across dispatch heuristics, baseline routes $R^0$ are generated using:
 \begin{enumerate}
     \item A deterministic Nearest Neighbor (NN) procedure as the primary ex-ante constructor.
     \item The Clarke-Wright Savings heuristic as an alternative baseline constructor.
 \end{enumerate}
 
-\paragraph{Invariant Verification and Hard Feasibility.}
-Every generated route $R'$ undergoes independent validation:
+\paragraph{Independent Route Validator and Open-Route Topologies.}
+All modified routes $R'$ are audited by an independent route validator to ensure hard operational feasibility:
 \begin{itemize}
-    \item \textbf{Proposition 1 Monotonicity}: Verified across 100\% of runs ($\min \Delta TT \ge 0.0000$ min, exactly 0 violations). Resequencing never degraded route performance.
-    \item \textbf{Hard Feasibility}: 100\% feasibility rate across all runs (no subtours, no duplicated or omitted customers, depot departure and arrival preserved, and cumulative distance constraint $D(R') \le (1+\delta)D(R^0)$ strictly enforced).
+    \item \textbf{Open-Route Topology}: Amazon Challenge routes are open dispatch sequences where the vehicle departs from the station depot and terminates at the final delivery stop without returning to the depot. The validator verifies that depot departure is preserved and that every customer stop is visited exactly once with no subtours or dropped parcels.
+    \item \textbf{Cumulative Distance Enforcement}: The cumulative distance constraint $D(R') \le (1+\delta)D(R^0)$ is strictly audited.
+    \item \textbf{Proposition 1 Invariant}: Monotonicity ($\Delta TT \ge 0$) is verified on every accepted move.
 \end{itemize}
 
-\subsection{Statistical Methodology and Empirical Framing}\label{sec:statistical-methodology}
-\paragraph{Route-Clustered Statistical Inference.}
-Standard cell-level pooling treats repeated parameter evaluations on the same route as independent observations, artificially inflating statistical degrees of freedom ($N=48$). To prevent pseudo-replication, statistical inference is conducted using route-clustered paired tests ($N=3$ independent test routes) with Holm--Bonferroni multiplicity correction.
+\subsection{Statistical Inference Framework}\label{sec:statistical-framework}
+To avoid pseudo-replication from pooling repeated parameter evaluations on the same route, hypothesis testing is conducted using route-clustered paired differences ($N$ independent test routes) with Holm--Bonferroni multiplicity correction.
 
-\paragraph{Core Finding and Equivalence Distinction.}
-The empirical results reveal clear \emph{actionability dominance}: the actionability score $g_i$ captures available single-vehicle schedule headroom, and actionability-based policies (RA and AB) achieve substantial simulated tardiness reductions, whereas pure risk targeting ($RB$) fails.
-
-Crucially, in comparing RA with AB:
-\begin{quote}
-\emph{No evidence of a difference between RA and AB was detected.}
-\end{quote}
-A nonsignificant difference ($p = 0.4825$) does not establish equivalence. Demonstrating statistical equivalence requires a prespecified practical equivalence margin and a formal Two One-Sided Tests (TOST) or confidence-interval equivalence procedure on an expanded cohort. Based on exploratory variance across the test cohort, a prospective power calculation provides a provisional planning estimate of $N \approx 34$ independent routes for future scaled evaluations.
-
-Definitive claims regarding the generalizability of PISR across diverse operational settings and the incremental value of risk weighting are appropriately reserved for Section 5 upon expansion to the broader Amazon Challenge cohort. The present conclusion remains exploratory: actionability drives the operational improvement, while risk weighting has not yet demonstrated incremental benefit over AB in this single-vehicle setting.
+In comparing targeting policies (specifically RA vs.\ AB), the statistical protocol distinguishes between failure to detect a difference and affirmative equivalence: demonstrating statistical equivalence requires a prespecified practical margin and a formal Two One-Sided Tests (TOST) or confidence-interval equivalence procedure on an adequately powered cohort. Full empirical findings, hypothesis resolutions, and sensitivity audits are reported in Section~\ref{sec:results}.
 
 \end{document}

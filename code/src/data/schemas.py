@@ -14,6 +14,10 @@ class Stop:
     predicted_risk_pi: float = 0.0  # p_i estimated lateness risk
     custom_data: Dict[str, Any] = field(default_factory=dict)
 
+    @property
+    def is_deadline_constrained(self) -> bool:
+        return self.promised_time is not None
+
 @dataclass
 class RouteInstance:
     route_id: str
