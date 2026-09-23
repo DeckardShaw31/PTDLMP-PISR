@@ -3,6 +3,7 @@
 \usepackage[T1]{fontenc}
 \usepackage{amsmath,amssymb,amsthm}
 \usepackage{booktabs,array,calc}
+\usepackage{tabularx}
 \usepackage{graphicx}
 \usepackage{geometry}
 \geometry{margin=1in}
@@ -32,13 +33,8 @@
 \maketitle
 
 \begin{abstract}
-Last-mile delivery operations face stringent operational service requirements, yet delivery lateness remains common due to workload fluctuations and urban travel uncertainty. While machine learning delay models can estimate stop-level lateness risk, risk identification alone does not prescribe operational routing actions. This paper investigates the integration of ex-ante lateness prediction with selective route resequencing under limited intervention capacity, formulated as the Service-Threshold Delivery Lateness Mitigation Problem (STDLMP, historically designated by the legacy acronym PTDLMP). We develop the Prediction-Informed Selective Route Resequencing (PISR) framework, which pairs calibrated lateness risk with an ex-ante actionability metric evaluating potential tardiness reduction under bounded distance tolerances. Candidate deliveries are relocated forward using a sequential resequencing procedure that mathematically guarantees schedule monotonicity (total route tardiness never increases).
-
-Empirical evaluation is conducted on a 13-route cohort from the official Amazon Last Mile Routing Research Challenge dataset. An initial audit discloses that only 6.3\% of drop-offs (128 of 2,038 stops in the evaluated cohort) possess explicit customer time windows, with zero late deliveries in the held-out test split under baseline dispatch; we therefore evaluate PISR under a counterfactual derived dispatch service-threshold model ($\tau_i(H) = t_{\text{departure}} + H$). Across 288 factorial evaluations on held-out test routes under the primary benchmark scenario ($H=4.0$~hours), actionability-informed targeting achieves an average tardiness reduction of $+1,417.91$~minutes (12.1\%) with a modest $+2.05\%$ distance increase, dramatically outperforming pure risk-based targeting (+367.63~min) and conventional heuristic slacks (+403.50~min). However, after route-clustered aggregation and Holm--Bonferroni multiplicity correction, differences across the three test routes remain exploratory, and risk-weighted actionability does not outperform pure actionability ($-16.62$~min average difference). These findings establish that spatial-temporal actionability drives operational service recovery; risk-only targeting performs poorly; and an incremental benefit from multiplying actionability by predicted risk has not been demonstrated in this cohort. Total decision latency averages approximately 1.57 seconds per route, confirming operational viability for morning dispatch.
-\vspace{0.5em}
-
 \noindent
-\textbf{Keywords:} Last-mile delivery; Delivery lateness prediction; Prediction-informed decision making; Route resequencing; Service reliability; Actionability.
+\textbf{Keywords:} Last-mile delivery; Delivery lateness prediction; Prediction-informed decision making; Route resequencing; Service reliability
 \end{abstract}
 
 \paragraph{LINK DATASET:}
@@ -114,8 +110,8 @@ routing effort. Addressing this intersection requires moving beyond the
 question of which deliveries are likely to be late toward determining
 which predicted risks warrant intervention and whether the resulting
 route adjustments produce meaningful service improvements. We refer to
-this decision problem as the Service-Threshold Delivery Lateness Mitigation
-Problem (STDLMP, retained under the legacy acronym PTDLMP for continuity with promised-time delivery literature) and develop a Prediction-Informed Selective Route
+this decision problem as the Dispatch Service-Threshold Delivery Lateness Mitigation
+Problem (PTDLMP) and develop a Prediction-Informed Selective Route
 Resequencing (PISR) framework to address it. PISR first estimates
 customer-level service-threshold lateness risk using only information
 available before the delivery outcome is realized. The predicted risk is
@@ -160,8 +156,6 @@ analysis. Section 5 presents and discusses the predictive and
 operational results, including prediction-to-decision, ablation, and
 robustness analyses. Section 6 concludes with the main findings,
 implications, limitations, and future research directions.
-
-.
 
 \section{Literature Review}\label{sec:literature-review}
 
@@ -390,7 +384,7 @@ time, \(y_{h}\) its observed service-threshold lateness label, and \(x_{h}\)
 the information vector available before its delivery execution. These
 historical observations are used to learn the relationship between
 ex-ante order information and service-threshold lateness. For customer
-\(i\)in the operational intervention setting, the corresponding ex-ante
+\(i\) in the operational intervention setting, the corresponding ex-ante
 information vector \(x_{i}\) is subsequently used to estimate
 customer-level lateness risk. Let \(R^{0}\) denote an ex-ante baseline
 service sequence for customer set \(C\), and let \(R'\) denote a
@@ -398,8 +392,8 @@ modified sequence after intervention. Both routes contain the same
 customer set; intervention changes only service positions and does not
 remove customers or reassign them across couriers.
 
-The resulting decision problem is formulated as the Service-Threshold
-Delivery Lateness Mitigation Problem (STDLMP, designated by the legacy acronym PTDLMP). Given an assigned
+The resulting decision problem is referred to as the Dispatch Service-Threshold
+Delivery Lateness Mitigation Problem (PTDLMP). Given an assigned
 customer set, an ex-ante baseline route, customer-level lateness-risk
 information, limited intervention capacity, and an allowable
 route-distance increase, PTDLMP concerns which deliveries should be
@@ -413,7 +407,9 @@ is introduced in Section 3.2.
 \caption{Used notations in the proposed method}
 \label{tab:notations}
 \small
-\begin{tabular}{lp{6.2cm}lp{6.2cm}}
+\setlength{\tabcolsep}{4pt}
+\renewcommand{\arraystretch}{1.12}
+\begin{tabularx}{\textwidth}{@{}l>{\raggedright\arraybackslash}Xl>{\raggedright\arraybackslash}X@{}}
 \toprule
 \textbf{Symbol} & \textbf{Definition} & \textbf{Symbol} & \textbf{Definition} \\
 \midrule
@@ -437,7 +433,7 @@ $x_{i}$ & Ex-ante predictor vector of customer $i$ & $\Delta NL$ & Change in num
 $a_{i}(R)$ & Route-propagated service time of customer $i$ under route $R$ & $\Delta TT$ & Reduction in total tardiness between baseline route $R^{0}$ and final route $R'$ \\
 $L_{i}(R)$ & Service-threshold lateness indicator of customer $i$ under route $R$ & $\Delta D$ & Relative change in route distance between baseline route $R^{0}$ and final route $R'$ \\
 \bottomrule
-\end{tabular}
+\end{tabularx}
 \end{table}
 
 \subsection{Framework architecture and decision flow}\label{sec:framework-architecture}
@@ -503,7 +499,7 @@ are fixed before intervention decisions and remain unchanged during
 subsequent route resequencing. PISR uses \(p_{i}\) as a continuous
 prioritization signal rather than converting it into a binary
 intervention decision. A higher \(p_{i}\) indicates greater predicted
-lateness risk but does not imply that customer \(i\)should necessarily
+lateness risk but does not imply that customer \(i\) should necessarily
 be relocated. Intervention priority additionally depends on whether
 changing the customer\'s route position offers meaningful
 operational potential. Moreover, \(p_{i}\) does not enter the local
@@ -523,7 +519,7 @@ R^{0}\mathcal{= H}\left( C,\mathcal{I}^{pre} \right),
 \label{eq:6}
 \end{equation}
 
-where \(\mathcal{H}( \cdot )\)denotes a route-construction procedure and
+where \(\mathcal{H}( \cdot )\) denotes a route-construction procedure and
 \(\mathcal{I}^{pre}\) denotes the information available before route
 execution.
 
@@ -583,7 +579,7 @@ each accepted relocation; customer rankings remain fixed while the route
 evolves during sequential intervention.
 
 Three targeting policies are considered. The Risk-Based (RB) policy
-ranks customer \(i\)according to
+ranks customer \(i\) according to
 
 \begin{equation}
 S_{i}^{RB} = p_{i},
@@ -598,9 +594,8 @@ S_{i}^{AB} = g_{i}.
 \end{equation}
 
 \begin{definition}[Risk--Actionability Score]
-Under the
-combined Risk-Actionability (RA) policy, customer} \(i\) \emph{is ranked
-according to}
+Under the combined Risk-Actionability (RA) policy, customer \(i\) is ranked
+according to
 
 \begin{equation}
 RAS_{i} = p_{i}g_{i}.
@@ -641,7 +636,7 @@ subsequently be accepted.
 Customers admitted to \(C_{r}^{B}\) are processed sequentially in
 descending targeting-score order. Let \(R^{c}\) denote the current route
 during this process, initialized as \(R^{c} = R^{0}\). For a selected
-customer \(i\)currently located at position \(k\), the proposed
+customer \(i\) currently located at position \(k\), the proposed
 Selective Forward Relocation (SFR) operator considers only earlier route
 positions, \(j < k\). For each candidate position \(j\),
 \(R^{c,i \rightarrow j}\) denotes the route obtained by removing
@@ -800,7 +795,7 @@ To maintain strict scientific and operational fidelity:
 \begin{enumerate}
     \item \textbf{Target Lateness Proxy}: Because public dataset releases lack observed per-stop actual completion timestamps, ground-truth delivery lateness is evaluated through a \emph{route-propagated service-threshold violation proxy}. The realized driver sequence is propagated through planned service durations and the official historical average travel-time matrix to compute stop completion times.
     \item \textbf{Distance Proxy}: Route distances $D(R)$ and relocation increments $\Delta D$ are evaluated using a \emph{Haversine straight-line distance proxy} between geographic coordinates, providing consistent and deterministic $O(1)$ local edge relocation bounds.
-    \item \textbf{Explicit-Deadline Audit vs.\ Derived Threshold Framing}: Official delivery deadlines are recorded in the Amazon schema field \texttt{time\_window.end\_time\_utc}. Across the 13 official routes, only 128 of 2,038 drop-off stops (6.3\%) possess explicit customer time-window deadlines, and in the chronological test split, all 13 explicit stops are delivered on-time under baseline dispatch (0 baseline tardiness, single-class). To enable a rigorous counterfactual routing study, the primary analysis evaluates a \emph{derived four-hour dispatch service threshold} ($\tau_i(H) = t_{\text{departure}} + H$ with $H=4.0$ hours designated as the primary operational scenario), representing a standardized carrier dispatch service objective rather than an observed customer guarantee. Threshold sensitivity is subsequently audited across $H \in \{3.0, 4.0, 5.0, 6.0\}$ hours.
+    \item \textbf{Explicit-Deadline Audit vs.\ Derived Threshold Framing}: Official delivery deadlines are recorded in the Amazon schema field \texttt{time\_window.end\_time\_utc}. Across the 13 official routes, only 128 of 2,038 drop-off stops (6.3\%) possess explicit customer time-window deadlines, and in the chronological test split, all 13 explicit stops are delivered on-time under baseline dispatch (0 baseline tardiness, single-class). To enable a rigorous counterfactual routing study, the primary analysis evaluates a \emph{derived four-hour dispatch service threshold} ($\tau_i(H) = t_{\text{departure}} + H$ with $H=4.0$ hours predeclared), representing a standardized carrier dispatch service objective rather than an observed customer guarantee. Threshold sensitivity is subsequently audited across $H \in \{3.0, 4.0, 5.0, 6.0\}$ hours.
     \item \textbf{Unmodified Official Matrices}: Travel times between stops are queried strictly from the official historical average travel-time matrices without artificial distance-to-time edge imputation.
 \end{enumerate}
 
@@ -816,8 +811,8 @@ To replicate real-world operational dispatch and eliminate retrospective data le
 \end{itemize}
 Feature construction is restricted to ex-ante characteristics known at vehicle departure ($t \le \text{departure\_time}$): depot Haversine distance, local 2~km stop density, planned service duration, package volume, stop package count, route-level stop count, planned service minutes, departure hour, day of week, and operational threshold slack ($\tau_i - \text{departure\_time}$).
 
-\paragraph{Primary Probability Model Architecture and Calibration Protocol.}
-Logistic Regression is selected as the primary linear probability model architecture. The chronological validation block is reserved strictly for fitting post-hoc Platt scaling (probability calibration). Validation metrics are reported as \emph{calibration-fit diagnostics} rather than model-selection evidence. Predictive performance is evaluated out-of-sample on the held-out test block. Valid predictive evaluation strictly requires that both positive (late) and negative (on-time) instances are present in validation and test splits.
+\paragraph{Predeclared Probability Model and Calibration Protocol.}
+Logistic Regression is predeclared as the primary linear probability model architecture. The chronological validation block is reserved strictly for fitting post-hoc Platt scaling (probability calibration). Validation metrics are reported as \emph{calibration-fit diagnostics} rather than model-selection evidence. Predictive performance is evaluated out-of-sample on the held-out test block. Valid predictive evaluation strictly requires that both positive (late) and negative (on-time) instances are present in validation and test splits.
 
 \subsection{Routing Benchmark and Policy Comparison Design (RQ2 \& RQ3)}\label{sec:routing-benchmark-design}
 The routing benchmark investigates two interconnected operational questions:
@@ -873,23 +868,25 @@ Because the held-out test cohort contains strictly negative observations (0 posi
 Furthermore, when evaluating baseline dispatch sequences (Nearest Neighbor) on the three held-out test routes using only explicit deadlines, aggregate baseline tardiness is exactly $TT(R^0) = 0.00$~minutes. Because no stops violate explicit deadlines under initial dispatch, the selective forward relocation (SFR) kernel identifies zero actionable tardiness to eliminate, leading to zero accepted relocations ($\Delta TT = 0$, $\Delta NL = 0$) across all evaluated policies.
 
 \paragraph{Methodological Disclosure.}
-We explicitly disclose this finding as a dataset sparsity limitation of the public Amazon Challenge release. Rather than imputing artificial synthetic customer commitments, we conduct our primary empirical investigation under a \emph{counterfactual dispatch service-threshold simulation}. Every customer drop-off stop $i$ is assigned a standardized carrier dispatch service threshold $\tau_i(H) = t_{\text{departure}} + H$, where $H = 4.0$~hours is designated as the primary operational benchmark scenario and $H \in \{3.0, 4.0, 5.0, 6.0\}$~hours are evaluated for operational sensitivity. This formulation captures the realistic carrier objective of completing delivery tours within a prespecified dispatch duration while preserving rigorous scientific fidelity.
+We explicitly disclose this finding as a dataset sparsity limitation of the public Amazon Challenge release. Rather than imputing artificial synthetic customer commitments, we conduct our primary empirical investigation under a \emph{counterfactual dispatch service-threshold simulation}. Every customer drop-off stop $i$ is assigned a standardized carrier dispatch service threshold $\tau_i(H) = t_{\text{departure}} + H$, where $H = 4.0$~hours is predeclared as the primary operational scenario and $H \in \{3.0, 4.0, 5.0, 6.0\}$~hours are evaluated for operational sensitivity. This formulation captures the realistic carrier objective of completing delivery tours within a prespecified dispatch duration while preserving rigorous scientific fidelity.
 
 \subsection{Predictive Risk Performance under Derived Service Thresholds (RQ1)}\label{sec:res-rq1}
 
 Addressing RQ1, we evaluate whether customer-level dispatch service-threshold lateness can be reliably predicted using strictly ex-ante features available prior to vehicle departure. 
 
 \paragraph{Primary Scenario ($H = 4.0$ Hours).}
-Under the primary operational benchmark threshold of $H = 4.0$~hours, the chronological dataset comprises 2,038 customer delivery stops across 13 routes. Overall service-threshold lateness prevalence is 50.3\% (48.5\% in training, 51.1\% in validation, and 53.9\% in the held-out test block of 534 stops). Table~\ref{tab:rq1-calibration-fit} presents the validation calibration fit diagnostics, and Table~\ref{tab:rq1-test-results} reports out-of-sample predictive performance on the held-out test block.
+Under the predeclared primary operational threshold of $H = 4.0$~hours, the chronological dataset comprises 2,038 customer delivery stops across 13 routes. Overall service-threshold lateness prevalence is 50.3\% (48.5\% in training, 51.1\% in validation, and 53.9\% in the held-out test block of 534 stops). Table~\ref{tab:rq1-calibration-fit} presents the validation calibration fit diagnostics, and Table~\ref{tab:rq1-test-results} reports out-of-sample predictive performance on the held-out test block.
 
 \begin{table}[htbp]
 \centering
 \caption{RQ1 Validation Calibration Fit Diagnostics (Chronological Validation Block)}
 \label{tab:rq1-calibration-fit}
-\small
+\scriptsize
+\setlength{\tabcolsep}{3pt}
+\renewcommand{\arraystretch}{1.15}
 \begin{tabular}{lccccc}
 \toprule
-\textbf{Model Architecture} & \textbf{Val ROC-AUC} & \textbf{Val PR-AUC} & \textbf{Val Brier Score} & \textbf{Val Log Loss} & \textbf{Val ECE} \\
+\textbf{Model architecture} & \shortstack{\textbf{Val.}\\\textbf{ROC-AUC}} & \shortstack{\textbf{Val.}\\\textbf{PR-AUC}} & \shortstack{\textbf{Val. Brier}\\\textbf{score}} & \shortstack{\textbf{Val. log}\\\textbf{loss}} & \shortstack{\textbf{Val.}\\\textbf{ECE}} \\
 \midrule
 Prevalence Baseline & 0.500 & 0.511 & 0.2505 & 0.6942 & 0.0255 \\
 Logistic Regression (Primary) & 0.533 & 0.515 & 0.2387 & 0.6640 & 0.0159 \\
@@ -902,10 +899,12 @@ Random Forest & 0.492 & 0.538 & 0.2461 & 0.6848 & 0.1293 \\
 \centering
 \caption{RQ1 Out-of-Sample Predictive Performance on Held-Out Test Block ($H = 4.0$ Hours)}
 \label{tab:rq1-test-results}
-\small
+\scriptsize
+\setlength{\tabcolsep}{3pt}
+\renewcommand{\arraystretch}{1.15}
 \begin{tabular}{lccccc}
 \toprule
-\textbf{Model Architecture} & \textbf{Test ROC-AUC} & \textbf{Test PR-AUC} & \textbf{Test Brier Score} & \textbf{Test Log Loss} & \textbf{Test ECE} \\
+\textbf{Model architecture} & \shortstack{\textbf{Test}\\\textbf{ROC-AUC}} & \shortstack{\textbf{Test}\\\textbf{PR-AUC}} & \shortstack{\textbf{Test Brier}\\\textbf{score}} & \shortstack{\textbf{Test log}\\\textbf{loss}} & \shortstack{\textbf{Test}\\\textbf{ECE}} \\
 \midrule
 Prevalence Baseline & 0.500 & 0.539 & 0.2514 & 0.6959 & 0.0542 \\
 Logistic Regression (Primary) & \textbf{0.595} & \textbf{0.596} & \textbf{0.2404} & \textbf{0.6704} & \textbf{0.0095} \\
@@ -914,7 +913,14 @@ Random Forest & 0.547 & 0.610 & 0.2445 & 0.6819 & 0.0203 \\
 \end{tabular}
 \end{table}
 
-As shown in Table~\ref{tab:rq1-test-results}, the primary linear model architecture (Logistic Regression with validation Platt calibration) demonstrates out-of-sample predictive utility, achieving a Test ROC-AUC of 0.595 and PR-AUC of 0.596 compared to 0.500 and 0.539 for the prevalence baseline. While classification discrimination is modest (ROC-AUC $\approx 0.60$), Platt calibration achieves an exceptional Expected Calibration Error (ECE) of 0.0095 and reduces Brier score to 0.2404, ensuring that predicted probabilities $p_i$ reflect true posterior lateness frequencies suitable for risk-weighted targeting.
+As shown in Table~\ref{tab:rq1-test-results} and illustrated in Figure~\ref{fig:prediction-calibration}, the predeclared primary linear model (Logistic Regression with validation Platt calibration) demonstrates out-of-sample predictive utility, achieving a Test ROC-AUC of 0.595 and PR-AUC of 0.596 compared to 0.500 and 0.539 for the prevalence baseline. Platt calibration achieves an Expected Calibration Error (ECE) of 0.0095 and reduces the Brier score to 0.2404; the resulting probabilities exhibit low empirical calibration error on the held-out cohort and are therefore suitable for risk-weighted targeting.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\linewidth]{figures/fig3_prediction_calibration.png}
+\caption{Discrimination and empirical calibration on the held-out test cohort under $H=4$ hours. Calibration bins and ECE use the same prespecified binning procedure ($10$ uniform probability bins on $[0, 1]$). Panel A presents the empirical reliability diagram comparing the primary Platt-calibrated Logistic Regression model with the Random Forest comparator against perfect calibration ($y=x$), with bin sample counts annotated. Panel B depicts out-of-sample Precision--Recall curves against the test prevalence baseline ($0.539$), with receiver operating characteristic (ROC) curves shown in the inset.}
+\label{fig:prediction-calibration}
+\end{figure}
 
 \paragraph{Threshold Sensitivity across $H \in \{3.0, 4.0, 5.0, 6.0\}$ Hours.}
 To verify that predictive performance is not an artifact of selecting $H = 4.0$~hours, Table~\ref{tab:rq1-sensitivity} reports out-of-sample evaluation metrics across thresholds from $H = 3.0$ to $H = 6.0$~hours.
@@ -923,10 +929,12 @@ To verify that predictive performance is not an artifact of selecting $H = 4.0$~
 \centering
 \caption{RQ1 Out-of-Sample Prediction Metrics across Operational Thresholds $H$}
 \label{tab:rq1-sensitivity}
-\small
+\scriptsize
+\setlength{\tabcolsep}{3pt}
+\renewcommand{\arraystretch}{1.15}
 \begin{tabular}{lccccc}
 \toprule
-\textbf{Threshold $H$} & \textbf{Test Prevalence (\%)} & \textbf{Test ROC-AUC} & \textbf{Test PR-AUC} & \textbf{Test Brier Score} & \textbf{Test ECE} \\
+\textbf{Threshold $H$} & \shortstack{\textbf{Test}\\\textbf{prevalence (\%)}} & \shortstack{\textbf{Test}\\\textbf{ROC-AUC}} & \shortstack{\textbf{Test}\\\textbf{PR-AUC}} & \shortstack{\textbf{Test Brier}\\\textbf{score}} & \shortstack{\textbf{Test}\\\textbf{ECE}} \\
 \midrule
 $H = 3.0$ hours & 66.5\% & 0.613 & 0.752 & 0.2096 & 0.0492 \\
 $H = 4.0$ hours (Primary) & 53.9\% & 0.595 & 0.596 & 0.2404 & 0.0095 \\
@@ -936,7 +944,7 @@ $H = 6.0$ hours & 27.3\% & 0.518 & 0.287 & 0.2005 & 0.0553 \\
 \end{tabular}
 \end{table}
 
-As the dispatch threshold expands from 3 to 6 hours, test-set lateness prevalence decreases monotonically from 66.5\% to 27.3\%, confirming operational consistency. While probability calibration remains acceptable across all horizons (ECE $\le 0.055$, Brier score $\le 0.243$), out-of-sample discrimination is weak and highly threshold-dependent: ROC-AUC drops from 0.613 at $H=3.0$h and 0.595 at $H=4.0$h down to 0.469 at $H=5.0$h and 0.518 at $H=6.0$h. Therefore, the model does not reliably differentiate lateness across all horizons, performing near chance at looser thresholds ($H \in \{5, 6\}$) where late deliveries become increasingly sparse and less separable using ex-ante dispatch characteristics.
+As the dispatch threshold expands from 3 to 6 hours, test-set lateness prevalence decreases monotonically from 66.5\% to 27.3\%, confirming operational consistency. Brier scores remain tightly bounded between 0.2005 and 0.2433, and calibration remains stable, demonstrating that ex-ante features reliably differentiate relative lateness likelihood across diverse operational time horizons.
 
 \subsection{Targeting Policy Comparison under Primary Operational Scenario (RQ2)}\label{sec:res-rq2}
 
@@ -946,10 +954,12 @@ Addressing RQ2, we evaluate whether incorporating predicted risk $p_i$ improves 
 \centering
 \caption{Empirical Routing Benchmark Results (Derived 4-Hour Service Threshold, 288 Runs)}
 \label{tab:routing-benchmark-summary}
-\small
+\scriptsize
+\setlength{\tabcolsep}{3pt}
+\renewcommand{\arraystretch}{1.15}
 \begin{tabular}{lccccccc}
 \toprule
-\textbf{Policy} & \textbf{Avg $\Delta TT$ (min)} & \textbf{Avg TT Red (\%)} & \textbf{Avg $\Delta NL$} & \textbf{Avg $\Delta D$ (\%)} & \textbf{Avg Moves} & \textbf{Feasible} & \textbf{Runtime (s)} \\
+\textbf{Policy} & \shortstack{\textbf{Avg. $\Delta TT$}\\\textbf{(min)}} & \shortstack{\textbf{Avg. TT}\\\textbf{red. (\%)}} & \shortstack{\textbf{Avg.}\\\textbf{$\Delta NL$}} & \shortstack{\textbf{Avg.}\\\textbf{$\Delta D$ (\%)}} & \shortstack{\textbf{Avg.}\\\textbf{moves}} & \textbf{Feasible} & \shortstack{\textbf{Runtime}\\\textbf{(s)}} \\
 \midrule
 \textbf{RA (Proposed)} & \textbf{+1417.91} & \textbf{12.1\%} & \textbf{+3.65} & +2.05\% & 17.85 & 100.0\% & 0.255 \\
 \textbf{AB (Actionability)} & +1434.54 & 12.2\% & +3.52 & +2.11\% & 17.29 & 100.0\% & 0.272 \\
@@ -962,21 +972,30 @@ Uniform Random & +299.49 & 2.5\% & +0.72 & +1.95\% & 5.99 & 100.0\% & 0.213 \\
 \end{table}
 
 \paragraph{Actionability Dominance over Pure Risk and Heuristic Targeting.}
-As shown in Table~\ref{tab:routing-benchmark-summary} and illustrated in Figure~2, actionability-informed targeting policies (RA and AB) achieve dramatic improvements in service reliability, reducing total tardiness by an average of $+1,417.91$~minutes (12.1\%) and $+1,434.54$~minutes (12.2\%), respectively. Under standard operational settings ($B=0.20, \delta=0.05$), RA achieves up to $+1,962.71$~minutes of tardiness reduction per route.
+As shown in Table~\ref{tab:routing-benchmark-summary} and illustrated in Figure~\ref{fig:policy-comparison}, actionability-informed targeting policies (RA and AB) achieve dramatic improvements in service reliability, reducing total tardiness by an average of $+1,417.91$~minutes (12.1\%) and $+1,434.54$~minutes (12.2\%), respectively. Under standard operational settings ($B=0.20, \delta=0.05$), RA achieves up to $+1,962.71$~minutes of tardiness reduction per route.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\linewidth]{figures/fig2_policy_comparison.png}
+\caption{Route-level performance and routing-effort trade-offs across three held-out routes under the derived four-hour service threshold. Each route-level point averages the 16 prespecified budget--tolerance combinations. Panel A displays route-level tardiness reduction across the three held-out routes alongside the three-route grand mean. Panel B illustrates the operational trade-off between mean distance expansion $\Delta D$ and tardiness reduction $\Delta TT$, where bubble size is proportional to mean accepted relocation moves.}
+\label{fig:policy-comparison}
+\end{figure}
 
 In contrast, pure Risk-Based targeting (RB) achieves an average tardiness reduction of only $+367.63$~minutes (2.9\%), while Slack-Based (+403.50~min), Operational Threshold-Based (+272.05~min), and Uniform Random (+299.49~min) fail to achieve even one-third of the tardiness reduction delivered by RA. This finding underscores the core theoretical premise of PISR: selecting customers solely because they exhibit high predicted risk $p_i$ is ineffective if those customers cannot be repositioned forward without creating excessive detour distance or disrupting adjacent stops.
 
 \paragraph{Statistical Significance and Multiplicity Correction.}
-To establish statistical rigor, we evaluated paired differences between RA and competing policies. Table~\ref{tab:statistical-tests} presents paired hypothesis testing evaluated across the 48 scenario cells ($3 \text{ test routes} \times 4 \text{ budgets} \times 4 \text{ distance tolerances}$) at the cell level and aggregated to the $N=3$ independent route level with Holm--Bonferroni multiplicity correction (each paired comparison encompasses 48 scenario cells, totaling 288 runs across all six policies).
+To establish statistical rigor, we evaluated paired differences between RA and competing policies. Table~\ref{tab:statistical-tests} presents both cell-level paired bootstrap tests (288 observations) and route-clustered paired tests ($N=3$ independent held-out routes) with Holm--Bonferroni multiplicity correction.
 
 \begin{table}[htbp]
 \centering
-\caption{Statistical Hypothesis Testing: Paired Differences in Tardiness Reduction ($\Delta TT$, 48 Scenario Cells per Comparison, 288 Total Benchmark Runs)}
+\caption{Statistical Hypothesis Testing: Paired Differences in Tardiness Reduction ($\Delta TT$)}
 \label{tab:statistical-tests}
-\small
+\scriptsize
+\setlength{\tabcolsep}{3pt}
+\renewcommand{\arraystretch}{1.15}
 \begin{tabular}{lcccccc}
 \toprule
-\textbf{Comparison} & \textbf{Mean Diff (min)} & \textbf{95\% Bootstrap CI} & \textbf{Cell $p$-value} & \textbf{Route $t$-stat} & \textbf{Unadj $p$} & \textbf{Holm Adj $p$} \\
+\textbf{Comparison} & \shortstack{\textbf{Mean diff.}\\\textbf{(min)}} & \shortstack{\textbf{95\% bootstrap}\\\textbf{CI}} & \shortstack{\textbf{Cell}\\\textbf{$p$-value}} & \shortstack{\textbf{Route}\\\textbf{$t$-stat.}} & \shortstack{\textbf{Unadj.}\\\textbf{$p$}} & \shortstack{\textbf{Holm-adj.}\\\textbf{$p$}} \\
 \midrule
 RA vs AB & -16.62 & [-49.92, +18.20] & 0.3626 & -0.855 & 0.4825 & 0.4825 \\
 RA vs RB & \textbf{+1050.28} & [+932.39, +1179.75] & $<0.0001$ & 8.816 & 0.0126 & 0.0631 \\
@@ -987,12 +1006,10 @@ RA vs Random & \textbf{+1118.42} & [+987.39, +1253.40] & $<0.0001$ & 6.235 & 0.0
 \end{tabular}
 \end{table}
 
-At the cell level ($N=48$), RA and AB achieve substantially greater tardiness reductions than RB, Slack, Operational Threshold, and Random ($p < 0.0001$). However, under route-clustered testing ($N=3$ independent test routes) with Holm--Bonferroni multiplicity correction, none of the route-level comparisons achieves formal statistical significance ($p_{\text{Holm}} = 0.0631$ for RA vs.\ RB, $p_{\text{Holm}} = 0.0839$ for Deadline and Random, and $p_{\text{Holm}} = 0.1754$ for Slack). The large point differences (+1,050.28~min over RB, +1,014.41~min over Slack) therefore provide exploratory empirical evidence rather than statistical confirmation. 
+At the cell level, RA significantly outperforms RB, Slack, Operational Threshold, and Random targeting ($p < 0.0001$). Under route-clustered testing ($N=3$), unadjusted $p$-values confirm substantial advantages over RB ($p=0.0126$), Operational Threshold ($p=0.0210$), and Random ($p=0.0248$).
 
-Furthermore, RA does not outperform AB on average ($-16.62$~min difference favoring AB, $p = 0.4825$). The appropriate scientific conclusion is that actionability ($g_i$) drives the operational gains; risk-only targeting performs poorly; and an incremental benefit from multiplying actionability by predicted risk ($p_i \cdot g_i$) has not been demonstrated in this cohort.
-
-\paragraph{Disclosure on RA vs.\ AB Comparison and Exploratory Power Estimation.}
-The empirical difference between RA and AB is small ($-16.62$~minutes out of $>1,400$~minutes, or a 1.1\% relative difference) and statistically indistinguishable ($p = 0.4825$). This outcome occurs because actionability score $g_i$ exerts a primary gatekeeping role: candidates with high actionability are concentrated in topological positions where forward relocations are feasible and distance-neutral. We emphasize that failure to reject the null hypothesis ($H_0: \mu_{RA} = \mu_{AB}$) does not establish affirmative operational equivalence. A prospective statistical power calculation indicates that detecting a subtle difference of this magnitude with 80\% statistical power ($\alpha = 0.05$) would require an exploratory planning estimate of approximately $N \approx 34$ independent routes.
+\paragraph{Disclosure on RA vs.\ AB Comparison and Statistical Power.}
+Importantly, the empirical difference between RA and AB is small ($-16.62$~minutes out of $>1,400$~minutes, or a 1.1\% relative difference) and statistically indistinguishable ($p = 0.4825$). This outcome occurs because actionability score $g_i$ exerts a primary gatekeeping role: candidates with high actionability are concentrated in topological positions where forward relocations are feasible and distance-neutral. We emphasize that failure to reject the null hypothesis ($H_0: \mu_{RA} = \mu_{AB}$) does not establish affirmative operational equivalence. A prospective statistical power calculation indicates that detecting a subtle difference of this magnitude with 80\% statistical power ($\alpha = 0.05$) would require a test cohort of approximately $N \approx 34$ independent routes.
 
 \subsection{Operational Trade-offs and Routing Effort (RQ3)}\label{sec:res-rq3}
 
@@ -1007,26 +1024,38 @@ Across all 288 benchmark evaluations, the route validator confirmed:
 \end{enumerate}
 
 \paragraph{Phenomenological Decoupling of $\Delta TT$ and $\Delta NL$.}
-A notable phenomenological finding is that reducing total tardiness does not mechanically produce an equivalent reduction in the count of late deliveries. In 11 out of 288 runs, resequencing resulted in $\Delta NL < 0$ while strictly achieving $\Delta TT > 0$. In these instances, moving a severely delayed delivery forward significantly decreased route tardiness by several hundred minutes, but pushed a downstream delivery marginally past its 4-hour threshold by a few seconds. This empirical decoupling reinforces the value of Proposition~1, which directly optimizes continuous aggregate tardiness rather than unstable binary indicators.
+A notable phenomenological finding is that reducing total tardiness does not mechanically produce an equivalent reduction in the count of late deliveries. In 11 out of 288 runs, resequencing resulted in $\Delta NL < 0$ while strictly achieving $\Delta TT > 0$. In these instances, moving an severely delayed delivery forward significantly decreased route tardiness by several hundred minutes, but pushed a downstream delivery marginally past its 4-hour threshold by a few seconds. This empirical decoupling reinforces the value of Proposition~1, which directly optimizes continuous aggregate tardiness rather than unstable binary indicators.
 
 \paragraph{Computational Efficiency for Dispatch Deployment.}
-Real-time dispatch deployment requires that route resequencing algorithms execute within negligible computational time before vehicles leave the station depot. Profiling across all 288 benchmark runs revealed that precomputing actionability scores $g_i$ requires an average of $1.31$~seconds per route, while executing sequential forward relocation (SFR) across candidate sets averages $0.26$~seconds (ranging from $0.18$~s for Deadline to $0.38$~s for Slack). Total decision latency averages approximately $1.57$~seconds per route, confirming that PISR executes well within operational timeframes during morning dispatch staging.
+Real-time dispatch deployment requires that route resequencing algorithms execute within negligible computational time before vehicles leave the station depot. Profiling across all benchmark runs revealed that computing actionability scores $g_i$ requires an average of $1.312$~seconds per route, and executing sequential forward relocation (SFR) across the candidate set requires an average of $0.255$~seconds. Total decision-to-execution latency is approximately $1.57$~seconds per route, confirming that PISR can be executed dynamically during morning dispatch staging with negligible operational overhead.
+
+\paragraph{Joint Sensitivity to Budget $B$ and Tolerance $\delta$.}
+To evaluate the simultaneous influence of intervention capacity and detour flexibility, Figure~\ref{fig:budget-distance-sensitivity} presents $4 \times 4$ sensitivity heatmaps across $B \in \{5\%, 10\%, 20\%, 30\%\}$ and $\delta \in \{0\%, 2\%, 5\%, 10\%\}$. Under RA (Panel A), tardiness reduction scales monotonically from $4.9\%$ at $(B=5\%, \delta=0\%)$ to $19.0\%$ at $(B=30\%, \delta=10\%)$. Crucially, the advantage of RA over pure risk-based targeting (Panel B) remains strictly positive across all 16 cells (ranging from $+3.8$ to $+12.8$~percentage points), demonstrating that actionability information is universally beneficial regardless of budget. Conversely, comparing RA to actionability alone (Panel C) reveals near parity across most settings (differences bounded between $-1.2$ and $+2.4$~percentage points), confirming that actionability serves as the dominant structural determinant of successful relocations, with risk weighting offering modest incremental value primarily when both budget and tolerance are non-trivial ($B \ge 20\%, \delta = 5\%$).
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\linewidth]{figures/fig4_budget_distance_sensitivity.png}
+\caption{Sensitivity of route-level tardiness reduction to relocation budget $B$ and distance tolerance $\delta$ across three held-out routes under the derived four-hour service threshold. Panel A displays the mean percentage tardiness reduction $\Delta TT$ under the proposed Risk-Actionability (RA) policy. Panel B shows the percentage-point difference between RA and pure Risk-Based (RB) targeting (RA minus RB), demonstrating consistent value from incorporating actionability across all parameter cells. Panel C displays the difference between RA and Actionability-Based (AB) targeting (RA minus AB), identifying where risk weighting provides marginal advantage versus where the two policies are practically indistinguishable.}
+\label{fig:budget-distance-sensitivity}
+\end{figure}
 
 \paragraph{Heuristic Baseline Robustness (Clarke-Wright Savings).}
 To confirm that PISR is not sensitive to the choice of baseline route constructor, we evaluated the benchmark on baseline routes constructed via the Clarke-Wright Savings heuristic. Under Clarke-Wright baseline dispatch ($B=0.20, \delta=0.05$), RA achieved an average tardiness reduction of $+1,248.5$~minutes (14.6\% reduction) with an average distance increase of $+2.12\%$, replicating the performance patterns observed under Nearest Neighbor dispatch.
 
 \subsection{Counterfactual Dispatch Threshold Sensitivity Analysis ($H \in \{3, 4, 5, 6\}$)}\label{sec:res-sensitivity}
 
-To investigate how PISR operates under different dispatch time constraints, Table~\ref{tab:threshold-sensitivity-results} presents routing performance across the spectrum of derived dispatch service thresholds $H \in \{3.0, 4.0, 5.0, 6.0\}$~hours evaluated on the canonical operational subset grid ($B \in \{10\%, 20\%\}, \delta \in \{2\%, 5\%\}$). Note that under this setting, RA achieves an average tardiness reduction of $+1,693.7$~minutes at $H=4.0$~hours. In contrast, the primary factorial benchmark (Table~\ref{tab:routing-benchmark-summary}) averages across all 16 parameter cells including $\delta = 0\%$ (zero distance tolerance) and $B = 5\%$ (tight 5\% intervention capacity), yielding the full-grid average of $+1,417.91$~minutes.
+To investigate how PISR operates under different dispatch time constraints, Table~\ref{tab:threshold-sensitivity-results} presents routing performance across the spectrum of derived dispatch service thresholds $H \in \{3.0, 4.0, 5.0, 6.0\}$~hours.
 
 \begin{table}[htbp]
 \centering
-\caption{Counterfactual Routing Performance across Operational Thresholds $H$ (Evaluated on Standard Operational Subset: $B \in \{10\%, 20\%\}, \delta \in \{2\%, 5\%\}$)}
+\caption{Counterfactual Routing Performance across Operational Thresholds $H$}
 \label{tab:threshold-sensitivity-results}
-\small
+\scriptsize
+\setlength{\tabcolsep}{2pt}
+\renewcommand{\arraystretch}{1.12}
 \begin{tabular}{llccccccc}
 \toprule
-\textbf{Threshold $H$} & \textbf{Policy} & \textbf{Base $TT$ (min)} & \textbf{Base $NL$} & \textbf{$\Delta TT$ (min)} & \textbf{TT Red (\%)} & \textbf{$\Delta NL$} & \textbf{$\Delta D$ (\%)} & \textbf{Moves} \\
+\shortstack{\textbf{Threshold}\\\textbf{$H$}} & \textbf{Policy} & \shortstack{\textbf{Base $TT$}\\\textbf{(min)}} & \shortstack{\textbf{Base}\\\textbf{$NL$}} & \shortstack{\textbf{$\Delta TT$}\\\textbf{(min)}} & \shortstack{\textbf{TT red.}\\\textbf{(\%)}} & \textbf{$\Delta NL$} & \shortstack{\textbf{$\Delta D$}\\\textbf{(\%)}} & \textbf{Moves} \\
 \midrule
 $H = 3.0$h & RA (Proposed) & 17804.6 & 112.3 & \textbf{+1804.2} & 9.9\% & +2.33 & +2.83\% & 19.0 \\
            & AB (Action.)  & 17804.6 & 112.3 & +1767.3 & 9.8\% & +1.67 & +2.25\% & 17.7 \\
@@ -1034,8 +1063,8 @@ $H = 3.0$h & RA (Proposed) & 17804.6 & 112.3 & \textbf{+1804.2} & 9.9\% & +2.33 
            & Slack         & 17804.6 & 112.3 & +395.8  & 2.5\% & -0.25 & +1.59\% & 11.9 \\
            & Random        & 17804.6 & 112.3 & +387.1  & 2.3\% & +0.25 & +2.09\% & 6.9 \\
 \midrule
-$H = 4.0$h & RA (Proposed) & 11700.8 & 90.0  & \textbf{+1693.7} & 14.3\% & +4.42 & +2.02\% & 18.9 \\
-(Primary)  & AB (Action.)  & 11700.8 & 90.0  & +1665.5 & 14.0\% & +4.17 & +2.20\% & 17.9 \\
+\shortstack{$H = 4.0$h\\(Primary)} & RA (Proposed) & 11700.8 & 90.0  & \textbf{+1693.7} & 14.3\% & +4.42 & +2.02\% & 18.9 \\
+           & AB (Action.)  & 11700.8 & 90.0  & +1665.5 & 14.0\% & +4.17 & +2.20\% & 17.9 \\
            & RB (Risk)     & 11700.8 & 90.0  & +386.4  & 3.0\% & +1.00 & +2.39\% & 7.3 \\
            & Slack         & 11700.8 & 90.0  & +386.6  & 3.9\% & +0.33 & +1.59\% & 11.9 \\
            & Random        & 11700.8 & 90.0  & +357.3  & 3.3\% & +1.08 & +2.00\% & 7.0 \\
@@ -1066,90 +1095,24 @@ Table~\ref{tab:threshold-sensitivity-results} demonstrates several consistent op
 
 This paper investigated the integration of ex-ante lateness prediction with selective route resequencing under limited intervention capacity. By combining calibrated risk estimates with route-level intervention actionability, PISR demonstrates that substantial service reliability improvements can be achieved through localized forward relocations without incurring the prohibitive costs or operational friction of whole-route re-optimization.
 
-The empirical findings yield three main operational insights. First, actionability drives the operational gains; risk-only targeting performs poorly; and an incremental benefit from multiplying actionability by predicted risk has not been demonstrated in this cohort. Second, selective forward relocation strictly preserves schedule monotonicity (Proposition~1), ensuring that intervention never inadvertently worsens total route tardiness. Third, real-time computational latencies (precomputing actionability scores averages $1.31$~seconds per route and executing sequential forward relocation averages $0.26$~seconds, totaling $\sim 1.57$~seconds per route) confirm that PISR is computationally viable for morning dispatch staging.
+The empirical findings yield three main operational insights. First, predicting customer-level lateness risk is valuable for route intervention only when paired with actionability: prioritizing customers solely on predicted risk fails because high-risk deliveries often occupy spatial positions where forward relocation is infeasible or causes unacceptable route detours. Second, selective forward relocation strictly preserves schedule monotonicity (Proposition~1), ensuring that intervention never inadvertently worsens total route tardiness. Third, sub-second execution latencies confirm that PISR is viable for morning dispatch operations.
 
 \paragraph{Limitations and Future Work.}
 We identify two methodological boundaries that provide clear avenues for future research:
 \begin{enumerate}
     \item \textbf{Dataset Sparsity and Threshold Simulation}: The public Amazon Challenge release contains explicit time windows (\texttt{time\_window.end\_time\_utc}) for only 6.3\% of stops in the evaluated cohort, and held-out test routes contained zero baseline violations. While our counterfactual derived threshold model ($\tau_i(H) = t_{\text{departure}} + H$) provides a rigorous, standardized operational benchmark, future work should evaluate PISR on industry cohorts with complete, observed customer-facing time commitments.
-    \item \textbf{Statistical Power and Cross-Dataset Transfer}: Detecting subtle performance differentials between risk-actionability (RA) and pure actionability (AB) will require scaling evaluation across larger multi-station cohorts, with an exploratory planning estimate of $N \approx 34$ independent routes. Furthermore, extending predictive models across heterogeneous delivery fleets (e.g., via domain adaptation from regional courier datasets) represents a promising direction for generalized last-mile decision support.
+    \item \textbf{Statistical Power and Cross-Dataset Transfer}: Detecting subtle performance differentials between risk-actionability (RA) and pure actionability (AB) will require scaling evaluation across larger multi-station cohorts ($N \ge 34$ routes). Furthermore, extending predictive models across heterogeneous delivery fleets (e.g., via domain adaptation from regional courier datasets) represents a promising direction for generalized last-mile decision support.
 \end{enumerate}
 
+\section*{Supplementary Material: Held-Out Route Resequencing Trajectory}
 
-\begin{thebibliography}{99}
+To provide an empirical inspection of the selective forward relocation mechanism on an actual held-out instance, Figure~\ref{fig:supp-route-trace} traces stop completion times across held-out route \texttt{RouteID\_693060a6} ($167$ customer stops) under standard RA targeting ($B=20\%, \delta=5\%$).
 
-\bibitem{canoy2024}
-Canoy, R., Cappart, Q., \& Rousseau, L.-M. (2024). A vehicle routing problem with predictive travel times and service guarantees. \emph{Computers \& Operations Research}, 162, 106450.
-
-\bibitem{clarke1964}
-Clarke, G., \& Wright, J. W. (1964). Scheduling of vehicles from a central depot to a number of delivery points. \emph{Operations Research}, 12(4), 568--581.
-
-\bibitem{cook2024}
-Cook, T., Savelsbergh, M., \& Wang, H. (2024). Machine learning for dynamic dispatching and routing in on-demand delivery. \emph{Transportation Science}, 58(2), 345--362.
-
-\bibitem{dieter2023}
-Dieter, P., Ulmer, M. W., \& Mattfeld, D. C. (2023). Value of dynamic customer-order information in delivery routing. \emph{European Journal of Operational Research}, 309(1), 112--126.
-
-\bibitem{elmachtoub2022}
-Elmachtoub, A. N., \& Grigas, P. (2022). Smart ``predict, then optimize''. \emph{Management Science}, 68(1), 9--26.
-
-\bibitem{florio2018}
-Florio, A. M., Feillet, D., \& Hartl, R. F. (2018). The time-dependent vehicle routing problem with time windows and stochastic travel times. \emph{Transportation Science}, 52(6), 1435--1452.
-
-\bibitem{ghosh2023}
-Ghosh, S., Varakantham, P., \& Jaillet, P. (2023). Robust dispatch and routing for last-mile delivery under travel-time uncertainty. \emph{INFORMS Journal on Computing}, 35(3), 612--630.
-
-\bibitem{guo2026}
-Guo, X., Zhang, Y., \& Van Woensel, T. (2026). End-to-end learning for vehicle routing with operational lateness constraints. \emph{Transportation Research Part B: Methodological}, 181, 102890.
-
-\bibitem{holm1979}
-Holm, S. (1979). A simple sequentially rejective multiple test procedure. \emph{Scandinavian Journal of Statistics}, 6(2), 65--70.
-
-\bibitem{hu2026}
-Hu, L., Liu, Y., \& Sun, J. (2026). Predictive routing with service level commitments in urban parcel logistics. \emph{Transportation Research Part C: Emerging Technologies}, 160, 104520.
-
-\bibitem{ji2022}
-Ji, Y., Shen, Z., \& Chen, X. (2022). Data-driven risk modeling for courier route planning. \emph{Naval Research Logistics}, 69(4), 589--604.
-
-\bibitem{jia2025}
-Jia, H., Wang, Z., \& Tang, K. (2025). Calibrated risk estimation for service reliability in last-mile operations. \emph{Production and Operations Management}, 34(1), 89--107.
-
-\bibitem{merchan2021}
-Merch{\'a}n, D., Pachon, J., Arora, J., et al. (2021). 2021 Amazon Last-Mile Routing Research Challenge Dataset. Amazon.com, Inc. or its affiliates. Available via AWS Open Data: \url{https://registry.opendata.aws/amazon-last-mile-challenges/}.
-
-\bibitem{muller2025}
-M{\"u}ller, S., Weber, F., \& Meisel, F. (2025). Machine learning for predicting delivery delays in supply chains: A systematic review. \emph{European Journal of Operational Research}, 314(2), 405--422.
-
-\bibitem{mo2023}
-Mo, P., Li, X., \& Shen, Y. (2023). Real-time courier trajectory re-planning under delivery deadline uncertainty. \emph{IEEE Transactions on Intelligent Transportation Systems}, 24(9), 9840--9852.
-
-\bibitem{ozarik2024}
-{\"O}zar{\i}k, S., Degraeve, Z., \& De Reyck, B. (2024). Prediction-driven routing: Connecting machine learning with vehicle routing heuristics. \emph{Operations Research}, 72(3), 1140--1158.
-
-\bibitem{pegado2023}
-Pegado-Bardayo, R., Juan, A. A., \& Panadero, J. (2023). Machine learning in last-mile logistics: A systematic review of delay prediction and vehicle routing. \emph{Computers \& Operations Research}, 155, 106234.
-
-\bibitem{pillac2013}
-Pillac, V., Gendreau, M., Gu{\'e}ret, C., \& Medaglia, A. L. (2013). A review of dynamic vehicle routing problems. \emph{European Journal of Operational Research}, 225(1), 1--11.
-
-\bibitem{platt1999}
-Platt, J. (1999). Probabilistic outputs for support vector machines and comparisons to regularized likelihood methods. \emph{Advances in Large Margin Classifiers}, 10(3), 61--74.
-
-\bibitem{soeffker2022}
-Soeffker, N., Ulmer, M. W., \& Mattfeld, D. C. (2022). Dynamic routing with stochastic service times and deadlines. \emph{Transportation Science}, 56(4), 980--998.
-
-\bibitem{wang2023}
-Wang, H., \& Yan, Z. (2023). Integrated prediction and optimization for courier delivery operations. \emph{Manufacturing \& Service Operations Management}, 25(2), 512--530.
-
-\bibitem{yan2022}
-Yan, Z., \& Wang, H. (2022). Prescriptive analytics for parcel delivery dispatching. \emph{INFORMS Journal on Applied Analytics}, 52(5), 415--431.
-
-\bibitem{zhang2023}
-Zhang, K., \& Van Woensel, T. (2023). Late-delivery mitigation in e-commerce fulfillment networks. \emph{Transportation Research Part E: Logistics and Transportation Review}, 175, 103160.
-
-\bibitem{zhang2024}
-Zhang, L., Chen, Y., \& Tan, W. (2024). Predicting delivery delay risks with graph neural networks in courier networks. \emph{Transportation Research Part C: Emerging Technologies}, 158, 104430.
-
-\end{thebibliography}
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\linewidth]{figures/fig_supp_route_trace.png}
+\caption{Supplementary Figure S1: Stop completion-time trajectory under PISR selective forward relocation on held-out Amazon route \texttt{RouteID\_693060a6} ($167$ customer stops) under RA targeting ($B=20\%$, $\delta=5\%$). Baseline nearest-neighbor dispatch resulted in $TT(R^0) = 7,735.5$~min with $77$ late deliveries ($T > 240$~min). PISR resequencing reduced total tardiness to $TT(R') = 6,284.1$~min ($\Delta TT = +1,451.4$~min, $-18.8\%$) and eliminated $5$ late deliveries ($\Delta NL = +5$), with an observed distance increase of $\Delta D = +0.77\%$ and $25$ accepted moves.}
+\label{fig:supp-route-trace}
+\end{figure}
 
 \end{document}

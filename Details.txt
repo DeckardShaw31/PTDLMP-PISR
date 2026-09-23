@@ -45,9 +45,10 @@ TABLE OF CONTENTS
    4.8 Seed Robustness Suite (10 Seeds x 48 Cells = 480 Runs)
 5. SYSTEM FIGURES & VISUALIZATIONS (ASCII DIAGRAMS & DESCRIPTIONS)
    5.1 Figure 1: End-to-End PISR System Architecture Flowchart
-   5.2 Figure 2: Policy Performance Comparison Across Factorial Parameter Grid
-   5.3 Figure 3: Route Before vs. After Resequencing (Geographic & Topological Shifts)
-   5.4 Figure 4: Local Forward Relocation Mechanics & Edge Modification Diagram
+   5.2 Figure 2: Route-Level Policy Performance & Operational Trade-Offs
+   5.3 Figure 3: Prediction Discrimination & Empirical Calibration (Reliability & PR Curves)
+   5.4 Figure 4: Budget-Distance Sensitivity Heatmaps (4x4 Matrix)
+   5.5 Supplementary Figure S1: Held-Out Route Stop Completion-Time Trajectory
 6. COMPLETE ACADEMIC BIBLIOGRAPHY (25 REFERENCES)
 7. EXTERNAL SOURCES, CODEBASE PROVENANCE & SOFTWARE DEPENDENCY AUDIT
    7.1 Primary Ingested Dataset: Official Amazon Last-Mile Challenge (2021)
@@ -643,45 +644,70 @@ Evaluated across 10 independent random seeds across all 48 parameter cells (480 
 |   Execution Profiling: Actionability precomputation = 1.31s; SFR = 0.26s; Total = 1.57s.         |
 +--------------------------------------------------------------------------------------------------+
 
-5.2 FIGURE 2: POLICY PERFORMANCE COMPARISON (`figures/fig2_policy_comparison.png`)
+5.2 FIGURE 2: POLICY PERFORMANCE & OPERATIONAL TRADE-OFFS (`figures/fig2_policy_comparison.png`)
 ----------------------------------------------------------------------------------------------------
-A grouped 4-panel empirical comparison across the 288 benchmark runs under H = 4.0 hours:
-  Panel A: Average Total Tardiness Reduction (Delta TT in minutes)
-    - RA: +1,417.91 min | AB: +1,434.54 min | Slack: +403.50 min | RB: +367.63 min | Random: +299.49 min
-  Panel B: Percentage Tardiness Reduction (% Delta TT)
-    - RA: 12.12% | AB: 12.23% | Slack: 4.00% | RB: 2.89% | Random: 2.52%
-  Panel C: Number of Late Deliveries Eliminated (Delta NL)
-    - RA: +3.65 stops | AB: +3.52 stops | RB: +0.83 stops | Deadline: +0.73 stops | Random: +0.72 stops
-  Panel D: Percentage Route Distance Expansion (% Delta D)
-    - RA: +2.05% | AB: +2.11% | RB: +1.93% | Random: +1.95% | Slack: +1.48% (All well within delta)
+Generated directly from `code/outputs/routing_benchmark_runs.csv` across the 3 held-out test routes:
+  Panel A: Route-Level Policy Comparison (Strip / Dot Plot)
+    - X-axis: Targeting policies ordered: RA (Proposed), AB (Actionability), Slack, RB (Risk), Deadline, Random.
+    - Y-axis: Mean Total Tardiness Reduction Delta TT (%).
+    - Route Points: Displays 3 distinct markers per policy (Route 1: 6930, Route 2: 7f5d, Route 3: 9475)
+      after averaging its 16 prespecified B, delta settings. Exposes actual small sample size (N=3).
+    - Grand Mean Overlay: Diamond marker + horizontal bar showing 3-route mean:
+      * RA: 12.1% (Route points: 12.09%, 11.75%, 12.51%)
+      * AB: 12.2% (Route points: 12.07%, 12.15%, 12.48%)
+      * Slack: 4.0% (Route points: 6.99%, 3.25%, 1.63%)
+      * RB: 2.9% (Route points: 1.36%, 2.77%, 4.54%)
+      * Deadline: 2.2% (Route points: 1.30%, 3.14%, 2.08%)
+      * Random: 2.5% (Route points: 2.27%, 2.37%, 2.92%)
+  Panel B: Operational Trade-Off: Tardiness vs. Distance
+    - X-axis: Mean Distance Increase Delta D (%) [1.2% to 2.5%].
+    - Y-axis: Mean Total Tardiness Reduction Delta TT (%) [0% to 15%].
+    - Bubble Size: Proportional to Mean Accepted Moves per route.
+    - Direct Callout Badges: Clearly annotates each policy, % tardiness reduction, and accepted moves:
+      * RA: (+12.1%, 17.9 mv, Delta D = +2.05%)
+      * AB: (+12.2%, 17.3 mv, Delta D = +2.11%)
+      * Slack: (+4.0%, 11.0 mv, Delta D = +1.48%)
+      * RB: (+2.9%, 7.4 mv, Delta D = +1.93%)
+      * Deadline: (+2.2%, 6.3 mv, Delta D = +2.28%)
+      * Random: (+2.5%, 6.0 mv, Delta D = +1.95%)
 
-5.3 FIGURE 3: ROUTE BEFORE VS. AFTER RESEQUENCING (`figures/fig3_route_before_after.png`)
+5.3 FIGURE 3: PREDICTION DISCRIMINATION & EMPIRICAL CALIBRATION (`figures/fig3_prediction_calibration.png`)
 ----------------------------------------------------------------------------------------------------
-Displays geographic delivery trajectories for RouteID_693060a6 (179 stops) under B=0.20, delta=0.05:
-  Left Panel (Baseline Nearest Neighbor Route R^0):
-    - Base Total Tardiness: 7,735.54 minutes.
-    - Base Late Deliveries: 77 late stops out of 179.
-    - Shows clusters of severely delayed drop-offs occurring in the final third of the open route.
-  Right Panel (PISR Resequenced Route R'):
-    - Resequenced Total Tardiness: 5,772.82 minutes (Delta TT = +1,962.71 minutes, -25.4% reduction).
-    - Resequenced Late Deliveries: 71 late stops (Delta NL = +6 late stops eliminated).
-    - Distance Increase: +1.96 km (+4.98%, strictly <= 5.0% tolerance).
-    - Visualizes selective forward bypass arcs where 18 highly actionable stops were moved forward
-      into topologically adjacent upstream sequence slots.
+Generated directly from `code/outputs/rq1_stop_level_predictions.csv` on the 534 held-out test stops:
+  Panel A: Empirical Reliability Diagram
+    - Evaluates 10 prespecified uniform bins on [0, 1] matching the ECE calculation protocol.
+    - Diagonal dashed reference line: Perfect Calibration (y = x).
+    - Platt-Calibrated Logistic Regression (Primary): Exceptional empirical calibration with ECE = 0.0095.
+      Individual bin sample sizes annotated (n=12, n=1, n=515, n=6).
+    - Random Forest (Comparator): ECE = 0.0203.
+  Panel B: Precision-Recall Curves & ROC Inset
+    - Main Plot: Out-of-sample PR curves for Logistic Regression (PR-AUC = 0.596) and Random Forest (PR-AUC = 0.609).
+    - Reference Line: Test prevalence baseline at 0.539.
+    - Inset Axes: Receiver Operating Characteristic (ROC) curves showing Logistic ROC-AUC = 0.595 and RF ROC-AUC = 0.547.
 
-5.4 FIGURE 4: LOCAL FORWARD RELOCATION MECHANICS
+5.4 FIGURE 4: BUDGET-DISTANCE SENSITIVITY HEATMAPS (`figures/fig4_budget_distance_sensitivity.png`)
 ----------------------------------------------------------------------------------------------------
-Before Move:
-  Upstream Sequence:    ... -> (j-1) -----------> (j) -> ...
-  Downstream Sequence:  ... -> (u-1) -> [Cust i] -> (u+1) -> ...
+Generated directly from `code/outputs/routing_benchmark_runs.csv` across the 4x4 factorial parameter grid:
+  Panel A: RA Mean Tardiness Reduction Delta TT (%) [Sequential YlGnBu Colormap]
+    - Scales monotonically from 4.9% at (B=5%, delta=0%) to 19.0% at (B=30%, delta=10%).
+  Panel B: Risk + Actionability vs. Pure Risk (RA minus RB, pp difference) [Diverging Coolwarm Colormap]
+    - Strictly positive across all 16 cells (+3.8 to +12.8 percentage points), demonstrating universal
+      value from pairing actionability with risk.
+  Panel C: Value of Risk Information vs. Actionability Alone (RA minus AB, pp difference) [Diverging Coolwarm]
+    - Tightly centered around zero (-1.2 to +2.4 percentage points), identifying where RA and AB are
+      practically indistinguishable and where risk weighting adds modest incremental value (B >= 20%, delta = 5%).
 
-After Move (Cust i relocated from position u forward to position j):
-  Upstream Sequence:    ... -> (j-1) -> [Cust i] -> (j) -> ...
-  Downstream Sequence:  ... -> (u-1) -----------> (u+1) -> ...
-
-Edge Removals:  (j-1, j), (u-1, i), (i, u+1)
-Edge Additions: (j-1, i), (i, j), (u-1, u+1)
-Distance Delta: O(1) computation with zero full-route loop overhead.
+5.5 SUPPLEMENTARY FIGURE S1: HELD-OUT ROUTE STOP COMPLETION-TIME TRAJECTORY (`figures/fig_supp_route_trace.png`)
+----------------------------------------------------------------------------------------------------
+Reproducible stop-level trace of held-out Amazon route `RouteID_693060a6` (167 stops) under RA (B=20%, delta=5%):
+  - X-axis: Stop sequence position along the route (1 to 167).
+  - Y-axis: Cumulative elapsed completion time after vehicle departure (0 to 480 minutes).
+  - Curves: Baseline sequence R^0 (Nearest Neighbor, blue line) vs. Resequenced sequence R' (PISR RA, green line).
+  - Reference: Horizontal dashed red line at 240.0 min (Derived 4-Hour Service Threshold).
+  - Relocated Stops: Explicit markers for baseline positions (red X) and advanced resequenced positions (purple circles).
+  - Recovered Stops: Star markers highlight the 8 delayed stops successfully pulled below 240 min into on-time status.
+  - Verified Empirical Metrics: Baseline TT = 7,735.5 min (77 late stops) -> Resequenced TT = 6,284.1 min (72 late stops);
+    Delta TT = +1,451.4 min (-18.8%), Delta NL = +5 stops, Delta D = +0.77%, SFR latency = 0.231 s.
 
 ====================================================================================================
 6. COMPLETE ACADEMIC BIBLIOGRAPHY (25 REFERENCES)
