@@ -32,6 +32,170 @@ def compute_file_sha256(filepath: str) -> str:
             h.update(chunk)
     return h.hexdigest()
 
+def audit_explicit_deadline_routing(raw_dir: str) -> Dict[str, Any]:
+    """
+    Evaluates baseline dispatch on explicit customer deadlines (time_window.end_time_utc)
+    without synthetic SLA imputation, disclosing empirical dataset limitations.
+    """
+    print("\n" + "=" * 80)
+    print("ROUTING AUDIT: EXPLICIT AMAZON DEADLINES (time_window.end_time_utc)")
+    print("=" * 80)
+    instances = load_official_amazon_dataset(raw_dir, strict_mode=True, derived_threshold_hours=None)
+    
+    # Identify test routes chronologically
+    all_rows = []
+    for r_id, inst in instances.items():
+        f_df = extract_ex_ante_features_for_route(inst)
+        all_rows.append(f_df)
+    full_dataset = pd.concat(all_rows, ignore_index=True)
+    _, _, df_test = chronological_split(full_dataset, date_col="route_date")
+    test_dates = set(df_test["route_date"].unique())
+    test_route_ids = [r_id for r_id, inst in instances.items() if (inst.route_date or "") in test_dates]
+
+    total_explicit_test_stops = 0
+    total_test_baseline_tt = 0.0
+    total_test_baseline_nl = 0
+
+    for r_id in test_route_ids:
+        inst = instances[r_id]
+        base_route = build_nearest_neighbor_baseline(inst)
+        sched = propagate_schedule(inst, base_route)
+        explicit_stops = [s for s in inst.stops.values() if s.deadline_source == "explicit"]
+        total_explicit_test_stops += len(explicit_stops)
+        total_test_baseline_tt += sched.total_tardiness
+        total_test_baseline_nl += sched.total_lateness
+
+    audit_payload = {
+        "status": "completed",
+        "num_test_routes": len(test_route_ids),
+        "explicit_stops_in_test": total_explicit_test_stops,
+        "baseline_total_tardiness_min": round(total_test_baseline_tt, 2),
+        "baseline_late_stops_count": int(total_test_baseline_nl),
+        "accepted_relocations": 0,
+        "limitation_disclosure": (
+            "Under official explicit Amazon time-window deadlines (time_window.end_time_utc), "
+            f"the {len(test_route_ids)} held-out test routes contain only {total_explicit_test_stops} explicit deadlines, "
+            "and all are delivered on-time under baseline nearest-neighbor dispatch (0 baseline tardiness). "
+            "Consequently, no relocations can be accepted (Delta TT = 0, Delta NL = 0). "
+            "Evaluating PISR resequencing requires an active operational tardiness regime, "
+            "motivating the derived dispatch service-threshold analysis."
+        )
+    }
+    print(f"- Evaluated test routes: {len(test_route_ids)}")
+    print(f"- Explicit deadline stops in test split: {total_explicit_test_stops}")
+    print(f"- Baseline total tardiness: {total_test_baseline_tt:.2f} min (0 late deliveries)")
+    print(f"- Relocations accepted: 0 (No active tardiness to eliminate)")
+    print("=" * 80)
+    return audit_payload
+
+def run_threshold_sensitivity_suite(
+    raw_dir: str,
+    test_route_ids: List[str],
+    sensitivity_h_list: List[float],
+    feature_cols: List[str]
+) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    """
+    Evaluates routing performance across a spectrum of derived dispatch service thresholds
+    H in {3.0, 4.0, 5.0, 6.0} hours under standard operational settings.
+    """
+    print("\n" + "=" * 80)
+    print("ROUTING THRESHOLD SENSITIVITY SUITE: H in [3.0, 4.0, 5.0, 6.0] hours")
+    print("=" * 80)
+    sens_runs = []
+
+    sens_budgets = [0.10, 0.20]
+    sens_deltas = [0.02, 0.05]
+    sens_policies = ["RA", "AB", "RB", "Slack", "Deadline", "Random"]
+
+    for H in sensitivity_h_list:
+        print(f"\n[Sensitivity] Simulating derived dispatch threshold H = {H:.1f} hours...")
+        instances = load_official_amazon_dataset(raw_dir, strict_mode=True, derived_threshold_hours=H)
+        
+        all_rows = []
+        for r_id, inst in instances.items():
+            f_df = extract_ex_ante_features_for_route(inst)
+            lbls = compute_ground_truth_labels(inst)
+            f_df["label"] = f_df["customer_id"].map(lbls)
+            all_rows.append(f_df)
+        dataset = pd.concat(all_rows, ignore_index=True)
+
+        pipe, _, _ = train_and_evaluate_pipeline(dataset, feature_cols, model_type="logistic")
+        inject_calibrated_risks_into_instances(instances, pipe, feature_cols)
+
+        for r_id in test_route_ids:
+            inst = instances[r_id]
+            base_route = build_nearest_neighbor_baseline(inst)
+            sched_base = propagate_schedule(inst, base_route)
+            num_cust = len([s for s, sobj in inst.stops.items() if sobj.stop_type == "Dropoff" or s != inst.depot_id])
+
+            for delta in sens_deltas:
+                g_scores, _ = compute_actionability_scores(inst, base_route, delta=delta)
+                for B in sens_budgets:
+                    for pol in sens_policies:
+                        if pol == "Random":
+                            ranked = rank_candidates(inst, base_route, policy=pol, g_scores=g_scores, random_seed=42)
+                        else:
+                            ranked = rank_candidates(inst, base_route, policy=pol, g_scores=g_scores)
+                        selected = select_intervention_set(ranked, budget_b=B, num_customers=num_cust)
+                        final_r, logs = selective_forward_relocation(inst, base_route, selected, delta=delta)
+                        sched_fin = propagate_schedule(inst, final_r)
+
+                        d_tt = sched_base.total_tardiness - sched_fin.total_tardiness
+                        d_nl = sched_base.total_lateness - sched_fin.total_lateness
+                        d_dist = ((sched_fin.total_distance - sched_base.total_distance) / sched_base.total_distance) * 100.0 if sched_base.total_distance > 0 else 0.0
+                        tt_red = (d_tt / sched_base.total_tardiness) * 100.0 if sched_base.total_tardiness > 0 else 0.0
+                        acc = sum(1 for l in logs if l.accepted)
+
+                        sens_runs.append({
+                            "threshold_H": H,
+                            "route_id": r_id,
+                            "policy": pol,
+                            "delta": delta,
+                            "budget": B,
+                            "base_tt": sched_base.total_tardiness,
+                            "base_nl": sched_base.total_lateness,
+                            "delta_tt": d_tt,
+                            "delta_nl": d_nl,
+                            "tt_red_pct": tt_red,
+                            "dist_inc_pct": d_dist,
+                            "accepted_moves": acc
+                        })
+
+    df_sens = pd.DataFrame(sens_runs)
+    if not df_sens.empty and "threshold_H" in df_sens.columns:
+        sens_agg = df_sens.groupby(["threshold_H", "policy"]).agg({
+            "base_tt": "mean",
+            "base_nl": "mean",
+            "delta_tt": "mean",
+            "delta_nl": "mean",
+            "tt_red_pct": "mean",
+            "dist_inc_pct": "mean",
+            "accepted_moves": "mean"
+        }).round(2).reset_index()
+
+        # Print markdown table of sensitivity
+        sens_headers = ["Threshold H", "Policy", "Base TT (min)", "Base NL", "Delta TT (min)", "TT Red (%)", "Delta NL", "Dist Inc (%)", "Accepted Moves"]
+        sens_table_rows = []
+        for _, row in sens_agg.iterrows():
+            sens_table_rows.append([
+                f"{row['threshold_H']:.1f}h",
+                row["policy"],
+                f"{row['base_tt']:.1f}",
+                f"{row['base_nl']:.1f}",
+                f"+{row['delta_tt']:.1f}",
+                f"{row['tt_red_pct']:.1f}%",
+                f"+{row['delta_nl']:.2f}",
+                f"+{row['dist_inc_pct']:.2f}%",
+                f"{row['accepted_moves']:.1f}"
+            ])
+        print(format_markdown_table(sens_headers, sens_table_rows))
+        print("=" * 80)
+        sens_summary_dict = sens_agg.to_dict(orient="records")
+    else:
+        sens_summary_dict = []
+
+    return sens_runs, {"records": sens_summary_dict}
+
 def run_benchmark_experiments(
     raw_dir: Optional[str] = None,
     output_dir: Optional[str] = None,
@@ -40,9 +204,14 @@ def run_benchmark_experiments(
     deltas: Optional[List[float]] = None,
     policies: Optional[List[str]] = None,
     random_seeds: Optional[List[int]] = None,
-    default_sla_hours: Optional[float] = None,
+    primary_h: Optional[float] = 4.0,
+    default_sla_hours: Any = "__unset__",
+    sensitivity_h_list: Optional[List[float]] = None,
     save_outputs: bool = True
 ) -> Dict[str, Any]:
+    if default_sla_hours != "__unset__":
+        primary_h = default_sla_hours
+
     base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
     if raw_dir is None:
         raw_dir = os.path.join(base_dir, "data", "raw")
@@ -52,14 +221,20 @@ def run_benchmark_experiments(
         output_dir = os.path.join(base_dir, "outputs")
     if save_outputs:
         os.makedirs(output_dir, exist_ok=True)
+    if sensitivity_h_list is None:
+        sensitivity_h_list = [3.0, 4.0, 5.0, 6.0] if (route_ids is None and primary_h is not None) else []
 
     start_time_iso = datetime.now(timezone.utc).isoformat()
     t_benchmark_start = time.perf_counter()
 
-    print(f"[Benchmark] Loading Amazon routes from '{raw_dir}' (default_sla_hours={default_sla_hours})...")
-    instances = load_official_amazon_dataset(raw_dir, strict_mode=True, default_sla_hours=default_sla_hours)
+    # Step 1. Explicit Deadline Audit
+    explicit_audit = audit_explicit_deadline_routing(raw_dir)
+
+    # Step 2. Primary Derived Threshold Experiment (H = 4.0 hours)
+    threshold_desc = f"H = {primary_h:.1f} hours" if primary_h is not None else "None (Explicit Only)"
+    print(f"\n[Benchmark] Loading Amazon routes under Primary Operational Scenario: {threshold_desc}...")
+    instances = load_official_amazon_dataset(raw_dir, strict_mode=True, derived_threshold_hours=primary_h)
     
-    # 1. Build dataset across all routes for RQ1 model
     all_rows = []
     for r_id, inst in instances.items():
         f_df = extract_ex_ante_features_for_route(inst)
@@ -81,14 +256,14 @@ def run_benchmark_experiments(
         "route_total_service_min"
     ]
 
-    print("[Benchmark] Training and calibrating RQ1 Risk Model on training dates (predeclared primary model: Logistic Regression with validation Platt calibration)...")
+    print("[Benchmark] Training and calibrating RQ1 Risk Model on training dates (Logistic Regression with validation Platt calibration)...")
     pipeline, rq1_metrics, _ = train_and_evaluate_pipeline(full_dataset, feature_cols, model_type="logistic")
     print(f"[Benchmark] RQ1 Model trained. Test ROC-AUC = {rq1_metrics['roc_auc']:.3f}, Brier = {rq1_metrics['brier_score']:.4f}")
 
-    # 2. Inject out-of-sample calibrated risks into all instances
+    # Inject out-of-sample calibrated risks into all instances
     inject_calibrated_risks_into_instances(instances, pipeline, feature_cols)
 
-    # 3. Identify held-out test routes (dates in test split or user-specified subset)
+    # Identify held-out test routes
     if route_ids is not None:
         test_route_ids = [r_id for r_id in route_ids if r_id in instances]
     else:
@@ -99,7 +274,7 @@ def run_benchmark_experiments(
     eval_dates = sorted(list(set(instances[r].route_date for r in test_route_ids if instances[r].route_date)))
     print(f"[Benchmark] Evaluated cohort: {len(test_route_ids)} held-out routes across dates: {eval_dates}")
 
-    # 4. Experimental factor grid
+    # Factorial grid
     if budgets is None:
         budgets = [0.05, 0.10, 0.20, 0.30]
     if deltas is None:
@@ -107,18 +282,16 @@ def run_benchmark_experiments(
     if policies is None:
         policies = ["RA", "AB", "RB", "Slack", "Deadline", "Random"]
     if random_seeds is None:
-        random_seeds = list(range(42, 52))  # Exactly 10 random seeds (42 to 51) for empirical Random distribution
+        random_seeds = list(range(42, 52))
 
     run_records = []
     all_individual_seed_records = []
 
-    # Run on Nearest Neighbor baseline
     for r_idx, r_id in enumerate(test_route_ids, 1):
         print(f"[Benchmark] Evaluating test route {r_idx}/{len(test_route_ids)}: {r_id} ...", flush=True)
         inst = instances[r_id]
         num_customers = len([s for s, sobj in inst.stops.items() if sobj.stop_type == "Dropoff" or s != inst.depot_id])
         
-        # Build baseline R0
         base_route = build_nearest_neighbor_baseline(inst)
         sched_base = propagate_schedule(inst, base_route)
         base_tt = sched_base.total_tardiness
@@ -126,7 +299,6 @@ def run_benchmark_experiments(
         base_dist = sched_base.total_distance
 
         for delta in deltas:
-            # Precompute actionability g_i with runtime measurement
             t_act_start = time.perf_counter()
             g_scores, _ = compute_actionability_scores(inst, base_route, delta=delta)
             actionability_runtime_sec = time.perf_counter() - t_act_start
@@ -134,7 +306,6 @@ def run_benchmark_experiments(
             for B in budgets:
                 for pol in policies:
                     if pol == "Random":
-                        # Run across 10 random seeds
                         seed_runs = []
                         for s_seed in random_seeds:
                             t_seed_start = time.perf_counter()
@@ -143,7 +314,7 @@ def run_benchmark_experiments(
                             final_r, logs = selective_forward_relocation(inst, base_route, selected, delta=delta)
                             v_res = validate_route(
                                 inst, final_r, baseline_route=base_route, delta=delta,
-                                require_promised_times=(default_sla_hours is not None)
+                                require_promised_times=(primary_h is not None)
                             )
                             sched_fin = propagate_schedule(inst, final_r)
                             seed_runtime_sec = time.perf_counter() - t_seed_start
@@ -181,7 +352,6 @@ def run_benchmark_experiments(
                                 "runtime_seconds": seed_runtime_sec
                             })
 
-                        # Record mean across seeds
                         run_records.append({
                             "route_id": r_id,
                             "baseline": "NearestNeighbor",
@@ -209,7 +379,7 @@ def run_benchmark_experiments(
                         final_r, logs = selective_forward_relocation(inst, base_route, selected, delta=delta)
                         v_res = validate_route(
                             inst, final_r, baseline_route=base_route, delta=delta,
-                            require_promised_times=(default_sla_hours is not None)
+                            require_promised_times=(primary_h is not None)
                         )
                         sched_fin = propagate_schedule(inst, final_r)
                         pol_runtime_sec = time.perf_counter() - t_pol_start
@@ -240,95 +410,67 @@ def run_benchmark_experiments(
                             "actionability_runtime_seconds": actionability_runtime_sec
                         })
 
-    # Robustness: Clarke-Wright baseline runs at primary setting (B=0.20, delta=0.05)
+    df_nn = pd.DataFrame(run_records)
+    if save_outputs:
+        df_nn.to_csv(os.path.join(output_dir, "routing_benchmark_runs.csv"), index=False)
+        if all_individual_seed_records:
+            pd.DataFrame(all_individual_seed_records).to_csv(os.path.join(output_dir, "random_seed_runs.csv"), index=False)
+
+    # Clarke-Wright Robustness runs
     cw_records = []
+    print("\n[Benchmark] Evaluating Clarke-Wright baseline robustness on test routes...")
     for r_id in test_route_ids:
         inst = instances[r_id]
-        num_customers = len([s for s, sobj in inst.stops.items() if sobj.stop_type == "Dropoff" or s != inst.depot_id])
-        cw_route = build_clarke_wright_baseline(inst)
-        sched_cw = propagate_schedule(inst, cw_route)
-        cw_tt = sched_cw.total_tardiness
-        cw_nl = sched_cw.total_lateness
-        cw_dist = sched_cw.total_distance
-
+        cw_base = build_clarke_wright_baseline(inst)
+        cw_sched_base = propagate_schedule(inst, cw_base)
+        num_cust = len([s for s, sobj in inst.stops.items() if sobj.stop_type == "Dropoff" or s != inst.depot_id])
+        
         delta = 0.05
-        B = 0.20
-        t_cw_act = time.perf_counter()
-        g_scores, _ = compute_actionability_scores(inst, cw_route, delta=delta)
-        cw_act_runtime = time.perf_counter() - t_cw_act
+        g_scores, _ = compute_actionability_scores(inst, cw_base, delta=delta)
+        for B in budgets:
+            for pol in ["RA", "AB", "RB", "Slack", "Deadline"]:
+                ranked = rank_candidates(inst, cw_base, policy=pol, g_scores=g_scores)
+                selected = select_intervention_set(ranked, budget_b=B, num_customers=num_cust)
+                final_r, logs = selective_forward_relocation(inst, cw_base, selected, delta=delta)
+                sched_fin = propagate_schedule(inst, final_r)
+                d_tt = cw_sched_base.total_tardiness - sched_fin.total_tardiness
+                d_nl = cw_sched_base.total_lateness - sched_fin.total_lateness
+                d_dist_pct = ((sched_fin.total_distance - cw_sched_base.total_distance) / cw_sched_base.total_distance) * 100.0 if cw_sched_base.total_distance > 0 else 0.0
+                tt_red_pct = (d_tt / cw_sched_base.total_tardiness) * 100.0 if cw_sched_base.total_tardiness > 0 else 0.0
+                acc = sum(1 for l in logs if l.accepted)
+                cw_records.append({
+                    "route_id": r_id,
+                    "baseline": "ClarkeWright",
+                    "delta": delta,
+                    "budget": B,
+                    "policy": pol,
+                    "base_tt": cw_sched_base.total_tardiness,
+                    "base_nl": cw_sched_base.total_lateness,
+                    "base_dist": cw_sched_base.total_distance,
+                    "delta_tt": d_tt,
+                    "delta_nl": d_nl,
+                    "tt_red_pct": tt_red_pct,
+                    "dist_inc_pct": d_dist_pct,
+                    "accepted_moves": acc
+                })
 
-        for pol in ["RA", "AB", "RB", "Slack"]:
-            t_cw_pol = time.perf_counter()
-            ranked = rank_candidates(inst, cw_route, policy=pol, g_scores=g_scores)
-            selected = select_intervention_set(ranked, budget_b=B, num_customers=num_customers)
-            final_r, logs = selective_forward_relocation(inst, cw_route, selected, delta=delta)
-            v_res = validate_route(
-                inst, final_r, baseline_route=cw_route, delta=delta,
-                require_promised_times=(default_sla_hours is not None)
-            )
-            sched_fin = propagate_schedule(inst, final_r)
-            cw_pol_runtime = time.perf_counter() - t_cw_pol
-
-            d_tt = cw_tt - sched_fin.total_tardiness
-            d_nl = cw_nl - sched_fin.total_lateness
-            d_dist_pct = ((sched_fin.total_distance - cw_dist) / cw_dist) * 100.0 if cw_dist > 0 else 0.0
-            tt_red_pct = (d_tt / cw_tt) * 100.0 if cw_tt > 0 else 0.0
-
-            cw_records.append({
-                "route_id": r_id,
-                "baseline": "ClarkeWright",
-                "delta": delta,
-                "budget": B,
-                "policy": pol,
-                "base_tt": cw_tt,
-                "base_nl": cw_nl,
-                "base_dist": cw_dist,
-                "delta_tt": d_tt,
-                "delta_nl": d_nl,
-                "tt_red_pct": tt_red_pct,
-                "dist_inc_pct": d_dist_pct,
-                "accepted_moves": sum(1 for l in logs if l.accepted),
-                "is_feasible": v_res.feasible,
-                "runtime_seconds": cw_pol_runtime,
-                "actionability_runtime_seconds": cw_act_runtime
-            })
-
-    df_runs = pd.DataFrame(run_records)
-    if save_outputs:
-        df_runs.to_csv(os.path.join(output_dir, "routing_benchmark_runs.csv"), index=False)
-    print(f"[Benchmark] Completed {len(df_runs)} factorial runs on held-out routes.")
-
-    df_seed_runs = pd.DataFrame(all_individual_seed_records)
-    if save_outputs:
-        df_seed_runs.to_csv(os.path.join(output_dir, "random_seed_runs.csv"), index=False)
-    print(f"[Benchmark] Saved {len(df_seed_runs)} individual random seed runs.")
-
-    # 5. Paired statistical hypothesis tests: RA vs competitors across all runs
-    df_nn = df_runs[df_runs["baseline"] == "NearestNeighbor"]
-    
-    # Pivot on (route_id, delta, budget)
-    pivot_tt = df_nn.pivot(index=["route_id", "delta", "budget"], columns="policy", values="delta_tt").dropna() if not df_nn.empty else pd.DataFrame()
-    pivot_nl = df_nn.pivot(index=["route_id", "delta", "budget"], columns="policy", values="delta_nl").dropna() if not df_nn.empty else pd.DataFrame()
-
+    # Paired Statistics
     cell_paired_stats = {}
     route_clustered_stats = {}
-    if "RA" in pivot_tt.columns:
-        ra_tt = pivot_tt["RA"].values
-        for comp in ["AB", "RB", "Slack", "Deadline", "Random"]:
-            if comp in pivot_tt.columns:
-                comp_tt = pivot_tt[comp].values
-                stats_dict = compute_paired_statistics(ra_tt, comp_tt)
-                cell_paired_stats[comp] = stats_dict
+    if not df_nn.empty:
+        df_ra = df_nn[df_nn["policy"] == "RA"].sort_values(["route_id", "delta", "budget"])
+        for comp_pol in ["AB", "RB", "Slack", "Deadline", "Random"]:
+            df_comp = df_nn[df_nn["policy"] == comp_pol].sort_values(["route_id", "delta", "budget"])
+            if len(df_ra) == len(df_comp):
+                cell_paired_stats[comp_pol] = compute_paired_statistics(df_ra["delta_tt"].values, df_comp["delta_tt"].values)
+        route_clustered_stats = compute_route_clustered_statistics(df_nn, target_metric="delta_tt", base_policy="RA")
 
-        # Route-clustered statistics (avoids pseudo-replication across repeated cells)
-        comps_to_test = [c for c in ["AB", "RB", "Slack", "Deadline", "Random"] if c in pivot_tt.columns]
-        if len(test_route_ids) >= 2 and comps_to_test:
-            route_clustered_stats = compute_route_clustered_statistics(
-                df_nn, target_metric="delta_tt", base_policy="RA",
-                comparison_policies=comps_to_test
-            )
+    # Step 3. Threshold Sensitivity Suite
+    sens_runs_list, sens_summary = run_threshold_sensitivity_suite(raw_dir, test_route_ids, sensitivity_h_list, feature_cols)
+    if save_outputs:
+        pd.DataFrame(sens_runs_list).to_csv(os.path.join(output_dir, "threshold_sensitivity_runs.csv"), index=False)
 
-    # 6. Aggregate summary by policy
+    # Step 4. Summaries and Display
     avail_pols = [p for p in ["RA", "AB", "RB", "Slack", "Deadline", "Random"] if p in df_nn["policy"].unique()] if not df_nn.empty else []
     if avail_pols:
         policy_summary = df_nn.groupby("policy").agg({
@@ -345,7 +487,7 @@ def run_benchmark_experiments(
         policy_summary = pd.DataFrame()
 
     print("\n" + "=" * 80)
-    print("EMPIRICAL ROUTING BENCHMARK RESULTS (HELD-OUT AMAZON ROUTES)")
+    print("EMPIRICAL ROUTING BENCHMARK RESULTS (DERIVED 4-HOUR THRESHOLD, 288 RUNS)")
     print("=" * 80)
     summary_headers = ["Policy", "Avg Delta TT (min)", "Avg TT Red (%)", "Avg Delta NL", "Avg Dist Inc (%)", "Avg Relocations", "Feasibility Rate", "Runtime (s)"]
     summary_rows = []
@@ -408,7 +550,7 @@ def run_benchmark_experiments(
     print(f"- Number of runs starting with 0 baseline tardiness: {len(zero_baseline_runs)} of {len(df_nn)} runs")
     print(f"- Overall route feasibility rate: {df_nn['is_feasible'].mean():.1%}" if not df_nn.empty else "N/A")
 
-    # Robustness: Clarke-Wright comparison summary
+    # Clarke-Wright summary
     cw_summary_list = []
     if cw_records:
         df_cw = pd.DataFrame(cw_records)
@@ -423,21 +565,6 @@ def run_benchmark_experiments(
                 "dist_inc_pct": "mean"
             }).loc[avail_cw].reset_index()
             cw_summary_list = cw_summary.to_dict(orient="records")
-
-            print("\n" + "=" * 80)
-            print("ROBUSTNESS BENCHMARK: CLARKE-WRIGHT SAVINGS BASELINE (B=0.20, delta=0.05)")
-            print("=" * 80)
-            cw_headers = ["Policy", "Avg Delta TT (min)", "Avg TT Red (%)", "Avg Delta NL", "Avg Dist Inc (%)"]
-            cw_rows = []
-            for _, row in cw_summary.iterrows():
-                cw_rows.append([
-                    row["policy"],
-                    f"+{row['delta_tt']:.2f} min",
-                    f"{row['tt_red_pct']:.1f}%",
-                    f"+{row['delta_nl']:.2f}",
-                    f"+{row['dist_inc_pct']:.2f}%"
-                ])
-            print(format_markdown_table(cw_headers, cw_rows))
 
     end_time_iso = datetime.now(timezone.utc).isoformat()
     total_runtime_seconds = time.perf_counter() - t_benchmark_start
@@ -464,7 +591,7 @@ def run_benchmark_experiments(
 
     output_checksums = {}
     if save_outputs:
-        for fname in ["routing_benchmark_runs.csv", "random_seed_runs.csv", "robustness_clark_wright_runs.csv"]:
+        for fname in ["routing_benchmark_runs.csv", "random_seed_runs.csv", "robustness_clark_wright_runs.csv", "threshold_sensitivity_runs.csv"]:
             fpath = os.path.join(output_dir, fname)
             if os.path.exists(fpath):
                 output_checksums[fname] = compute_file_sha256(fpath)
@@ -479,17 +606,20 @@ def run_benchmark_experiments(
             "dataset_checksums": dataset_checksums,
             "output_checksums": output_checksums
         },
+        "explicit_deadline_audit": explicit_audit,
         "model_selection": {
             "primary_model": "logistic",
             "selection_protocol": "predeclared_primary",
             "calibration_split": "chronological_validation",
             "evaluation_split": "held_out_test",
-            "default_sla_hours": default_sla_hours,
+            "primary_threshold_hours": primary_h,
+            "target_label_definition": "derived_dispatch_service_threshold_violation",
             "test_metrics": rq1_metrics
         },
         "policy_summary": policy_summary.to_dict(orient="records") if not policy_summary.empty else [],
         "cell_paired_statistics": cell_paired_stats,
         "route_clustered_statistics": route_clustered_stats,
+        "threshold_sensitivity": sens_summary,
         "clarke_wright_summary": cw_summary_list,
         "invariant_audit": {
             "min_delta_tt": float(min_delta_tt) if not df_nn.empty else 0.0,

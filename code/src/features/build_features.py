@@ -78,11 +78,11 @@ def extract_ex_ante_features_for_route(
                 if d <= 2.0:
                     density_2km += 1
 
-        # 3. Time until deadline
+        # 3. Time until deadline (strictly ex-ante from explicit or derived threshold)
         if stop.promised_time is not None:
             time_to_deadline_min = (stop.promised_time - dep_time).total_seconds() / 60.0
         else:
-            time_to_deadline_min = 240.0  # Default 4 hours if unspecified
+            time_to_deadline_min = np.nan
 
         num_pkgs = stop.custom_data.get("num_packages", 1) if stop.custom_data else 1
 
@@ -90,6 +90,8 @@ def extract_ex_ante_features_for_route(
             "route_id": instance.route_id,
             "route_date": instance.route_date or dep_time.strftime("%Y-%m-%d"),
             "customer_id": c_id,
+            "deadline_source": stop.deadline_source,
+            "is_deadline_constrained": stop.is_deadline_constrained,
             "dist_from_depot_km": dist_depot,
             "local_density_2km": density_2km,
             "planned_service_seconds": stop.service_seconds,

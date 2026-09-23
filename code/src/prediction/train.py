@@ -128,7 +128,8 @@ def train_and_evaluate_pipeline(
     feature_cols: List[str],
     target_col: str = "label",
     model_type: str = "logistic",
-    calibration_method: str = "sigmoid"
+    calibration_method: str = "sigmoid",
+    require_dual_class: bool = False
 ) -> Tuple[RiskPredictionPipeline, Dict[str, float], pd.DataFrame]:
     """
     Executes chronological training, validation probability calibration, and out-of-sample test evaluation.
@@ -138,11 +139,25 @@ def train_and_evaluate_pipeline(
       - Out-of-sample evaluation and model comparison are conducted on the held-out test split.
     Returns: (fitted_pipeline, metrics_dict, test_predictions_df)
     """
-    df_train, df_val, df_test = chronological_split(df, date_col="route_date")
+    # Filter out stops without any operational deadline or threshold
+    if "deadline_source" in df.columns:
+        df_model = df[df["deadline_source"] != "none"].copy()
+    else:
+        df_model = df.copy()
+
+    df_train, df_val, df_test = chronological_split(df_model, date_col="route_date")
 
     X_train, y_train = df_train[feature_cols], df_train[target_col].values
     X_val, y_val = df_val[feature_cols], df_val[target_col].values
     X_test, y_test = df_test[feature_cols], df_test[target_col].values
+
+    if require_dual_class:
+        for split_name, y_s in [("train", y_train), ("validation", y_val), ("test", y_test)]:
+            if len(np.unique(y_s)) < 2:
+                raise ValueError(
+                    f"Single-class split detected in {split_name} split (classes: {np.unique(y_s)}). "
+                    "Valid scientific evaluation requires both positive and negative classes."
+                )
 
     pipeline = RiskPredictionPipeline(
         model_type=model_type,
@@ -181,7 +196,13 @@ def inject_calibrated_risks_into_instances(
     for route_id, inst in instances.items():
         feat_df = extract_ex_ante_features_for_route(inst)
         if not feat_df.empty:
-            X = feat_df[feature_cols]
-            probs = pipeline.predict_proba(X)
             for idx, c_id in enumerate(feat_df["customer_id"]):
-                inst.stops[c_id].predicted_risk_pi = float(probs[idx])
+                inst.stops[c_id].predicted_risk_pi = 0.0
+            
+            constrained_mask = feat_df["is_deadline_constrained"].values
+            if np.any(constrained_mask):
+                X_constr = feat_df.loc[constrained_mask, feature_cols]
+                probs = pipeline.predict_proba(X_constr)
+                constr_c_ids = feat_df.loc[constrained_mask, "customer_id"].values
+                for idx, c_id in enumerate(constr_c_ids):
+                    inst.stops[c_id].predicted_risk_pi = float(probs[idx])

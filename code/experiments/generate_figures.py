@@ -43,7 +43,7 @@ def create_policy_comparison_figure(benchmark_json_path: str, out_path: str):
     # Bar chart 1: % TT Reduction
     bars1 = ax1.bar(display_names, tt_reduction, color=colors, width=0.55, edgecolor="black", linewidth=0.8)
     ax1.set_ylabel("Total Tardiness Reduction (%)", fontsize=12, fontweight="bold")
-    ax1.set_title("A. Mean Tardiness Reduction by Targeting Policy\n(Held-out Amazon Routes, 288 Factorial Runs)", fontsize=12, fontweight="bold", pad=12)
+    ax1.set_title("A. Mean Tardiness Reduction by Targeting Policy\n(Held-out Amazon Routes, Derived 4-Hour Service Threshold, 288 Runs)", fontsize=12, fontweight="bold", pad=12)
     max_tt = max(tt_reduction) if (tt_reduction and max(tt_reduction) > 0) else 15.0
     ax1.set_ylim(0, max(1.0, max_tt * 1.3))
     for bar in bars1:
@@ -68,9 +68,9 @@ def create_policy_comparison_figure(benchmark_json_path: str, out_path: str):
 def create_route_resequencing_map_figure(data_dir: str, out_path: str):
     """
     Creates Figure 3: Visual inspection of route before and after Selective Forward Relocation (SFR)
-    using official Amazon Challenge data.
+    under the Derived 4-Hour Dispatch Service Threshold.
     """
-    instances = load_official_amazon_dataset(data_dir, strict_mode=True, default_sla_hours=None)
+    instances = load_official_amazon_dataset(data_dir, strict_mode=True, derived_threshold_hours=4.0)
     # Select first route with active tardiness
     target_r_id = None
     target_inst = None

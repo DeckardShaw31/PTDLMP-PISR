@@ -1,7 +1,7 @@
-# Prediction-Informed Selective Route Resequencing (PISR) for Promised-Time Delivery Lateness Mitigation
+# Prediction-Informed Selective Route Resequencing (PISR) for Dispatch Service-Threshold Lateness Mitigation
 
 This repository contains the official codebase, experimental pipeline, reproduction scripts, and manuscript for the study:
-**"Prediction-Informed Selective Route Resequencing for Promised-Time Delivery Lateness Mitigation under Limited Intervention Capacity" (PTDLMP-PISR)**.
+**"Prediction-Informed Selective Route Resequencing for Dispatch Service-Threshold Lateness Mitigation under Limited Intervention Capacity" (PTDLMP-PISR)**.
 
 ---
 
@@ -125,9 +125,9 @@ This generates `routing_benchmark_runs.csv`, `robustness_clark_wright_runs.csv`,
 
 ---
 
-## 📊 Summary of Empirical Results (Amazon Challenge Exploratory Cohort)
+## 📊 Summary of Empirical Results (Derived 4-Hour Dispatch Service Threshold)
 
-### Policy Comparison (Held-out Routes, 288 Factorial Runs)
+### Policy Comparison (Held-out Amazon Routes, 288 Factorial Runs)
 
 | Policy | Targeting Formula | Avg $\Delta TT$ (min) | Avg TT Red (%) | Avg $\Delta NL$ (late avoided) | Avg Dist Inc (%) | Feasibility Rate |
 |---|---|---:|---:|---:|---:|---:|

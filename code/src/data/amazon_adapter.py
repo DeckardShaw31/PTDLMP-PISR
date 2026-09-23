@@ -52,6 +52,7 @@ def load_official_amazon_dataset(
     strict_mode: bool = True,
     fill_missing_travel_times_with_haversine: bool = False,
     haversine_speed_kmh: float = 25.0,
+    derived_threshold_hours: Optional[float] = None,
     default_sla_hours: Optional[float] = None
 ) -> Dict[str, RouteInstance]:
     """
@@ -222,9 +223,14 @@ def load_official_amazon_dataset(
                     earliest_deadline = parse_iso_or_time_string(end_str, route_date)
                     pkg_count = 1
 
-            if earliest_deadline is None and stype != "Station":
-                if default_sla_hours is not None:
-                    earliest_deadline = dep_time + timedelta(hours=default_sla_hours)
+            deadline_source = "none"
+            threshold_hours = derived_threshold_hours if derived_threshold_hours is not None else default_sla_hours
+            if earliest_deadline is not None:
+                deadline_source = "explicit"
+            elif stype != "Station":
+                if threshold_hours is not None:
+                    earliest_deadline = dep_time + timedelta(hours=threshold_hours)
+                    deadline_source = "derived_threshold"
                 else:
                     total_missing_sla += 1
 
@@ -237,6 +243,7 @@ def load_official_amazon_dataset(
                 service_seconds=total_service_sec if stype != "Station" else 0.0,
                 package_volume_cm3=total_volume,
                 predicted_risk_pi=0.0,
+                deadline_source=deadline_source if stype != "Station" else "none",
                 custom_data={
                     "zone_id": zone_id,
                     "num_packages": pkg_count,

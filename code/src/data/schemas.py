@@ -12,11 +12,12 @@ class Stop:
     service_seconds: float = 0.0
     package_volume_cm3: float = 0.0
     predicted_risk_pi: float = 0.0  # p_i estimated lateness risk
+    deadline_source: str = "none"  # "explicit" | "derived_threshold" | "none"
     custom_data: Dict[str, Any] = field(default_factory=dict)
 
     @property
     def is_deadline_constrained(self) -> bool:
-        return self.promised_time is not None
+        return self.deadline_source in ("explicit", "derived_threshold")
 
 @dataclass
 class RouteInstance:
