@@ -50,7 +50,21 @@ htmlcov/
 thesis/
 data/raw/
 *.part
+# Full ALMRRC 2021 download and per-route shards (2.3 GB; rebuilt by code/scripts/build_full_cohort.py)
+code/data/s3_cache/
+code/data/full_cohort/
+# Full-cohort intermediate files (per-route checkpoints, features, models, raw scenario arrays, logs)
+code/outputs/full_cohort/routes/
+code/outputs/full_cohort/features/
+code/outputs/full_cohort/models.pkl
+code/outputs/full_cohort/*.npz
+code/outputs/full_cohort/*.parquet
+code/outputs/full_cohort/*.log
 *.csv.gz
+# Generated M8 scenario-level results (compressed, reproducible from the fixed scenario seed)
+!code/outputs/scenario_level_runs.csv.gz
+# Full-cohort result tables (about 6 MB in total)
+!code/outputs/full_cohort/*.csv.gz
 
 # IDE & OS
 .vscode/

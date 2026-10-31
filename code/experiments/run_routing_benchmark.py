@@ -88,6 +88,55 @@ def audit_explicit_deadline_routing(raw_dir: str) -> Dict[str, Any]:
     print("=" * 80)
     return audit_payload
 
+SENS_BUDGETS = [0.10, 0.20]
+SENS_DELTAS = [0.02, 0.05]
+SENS_POLICIES = ["RA", "AB", "RB", "Slack", "Deadline", "Random"]
+
+def evaluate_sensitivity_route(inst, H: float) -> List[Dict[str, Any]]:
+    """
+    Threshold-sensitivity grid (B in {10%, 20%}, delta in {2%, 5%}, Random seed 42) for one route whose
+    promised times and predicted risks were built for threshold H.
+    """
+    r_id = inst.route_id
+    records = []
+    base_route = build_nearest_neighbor_baseline(inst)
+    sched_base = propagate_schedule(inst, base_route)
+    num_cust = len([s for s, sobj in inst.stops.items() if sobj.stop_type == "Dropoff" or s != inst.depot_id])
+
+    for delta in SENS_DELTAS:
+        g_scores, _ = compute_actionability_scores(inst, base_route, delta=delta)
+        for B in SENS_BUDGETS:
+            for pol in SENS_POLICIES:
+                if pol == "Random":
+                    ranked = rank_candidates(inst, base_route, policy=pol, g_scores=g_scores, random_seed=42)
+                else:
+                    ranked = rank_candidates(inst, base_route, policy=pol, g_scores=g_scores)
+                selected = select_intervention_set(ranked, budget_b=B, num_customers=num_cust)
+                final_r, logs = selective_forward_relocation(inst, base_route, selected, delta=delta)
+                sched_fin = propagate_schedule(inst, final_r)
+
+                d_tt = sched_base.total_tardiness - sched_fin.total_tardiness
+                d_nl = sched_base.total_lateness - sched_fin.total_lateness
+                d_dist = ((sched_fin.total_distance - sched_base.total_distance) / sched_base.total_distance) * 100.0 if sched_base.total_distance > 0 else 0.0
+                tt_red = (d_tt / sched_base.total_tardiness) * 100.0 if sched_base.total_tardiness > 0 else 0.0
+                acc = sum(1 for l in logs if l.accepted)
+
+                records.append({
+                    "threshold_H": H,
+                    "route_id": r_id,
+                    "policy": pol,
+                    "delta": delta,
+                    "budget": B,
+                    "base_tt": sched_base.total_tardiness,
+                    "base_nl": sched_base.total_lateness,
+                    "delta_tt": d_tt,
+                    "delta_nl": d_nl,
+                    "tt_red_pct": tt_red,
+                    "dist_inc_pct": d_dist,
+                    "accepted_moves": acc
+                })
+    return records
+
 def run_threshold_sensitivity_suite(
     raw_dir: str,
     test_route_ids: List[str],
@@ -102,10 +151,6 @@ def run_threshold_sensitivity_suite(
     print("ROUTING THRESHOLD SENSITIVITY SUITE: H in [3.0, 4.0, 5.0, 6.0] hours")
     print("=" * 80)
     sens_runs = []
-
-    sens_budgets = [0.10, 0.20]
-    sens_deltas = [0.02, 0.05]
-    sens_policies = ["RA", "AB", "RB", "Slack", "Deadline", "Random"]
 
     for H in sensitivity_h_list:
         print(f"\n[Sensitivity] Simulating derived dispatch threshold H = {H:.1f} hours...")
@@ -123,43 +168,7 @@ def run_threshold_sensitivity_suite(
         inject_calibrated_risks_into_instances(instances, pipe, feature_cols)
 
         for r_id in test_route_ids:
-            inst = instances[r_id]
-            base_route = build_nearest_neighbor_baseline(inst)
-            sched_base = propagate_schedule(inst, base_route)
-            num_cust = len([s for s, sobj in inst.stops.items() if sobj.stop_type == "Dropoff" or s != inst.depot_id])
-
-            for delta in sens_deltas:
-                g_scores, _ = compute_actionability_scores(inst, base_route, delta=delta)
-                for B in sens_budgets:
-                    for pol in sens_policies:
-                        if pol == "Random":
-                            ranked = rank_candidates(inst, base_route, policy=pol, g_scores=g_scores, random_seed=42)
-                        else:
-                            ranked = rank_candidates(inst, base_route, policy=pol, g_scores=g_scores)
-                        selected = select_intervention_set(ranked, budget_b=B, num_customers=num_cust)
-                        final_r, logs = selective_forward_relocation(inst, base_route, selected, delta=delta)
-                        sched_fin = propagate_schedule(inst, final_r)
-
-                        d_tt = sched_base.total_tardiness - sched_fin.total_tardiness
-                        d_nl = sched_base.total_lateness - sched_fin.total_lateness
-                        d_dist = ((sched_fin.total_distance - sched_base.total_distance) / sched_base.total_distance) * 100.0 if sched_base.total_distance > 0 else 0.0
-                        tt_red = (d_tt / sched_base.total_tardiness) * 100.0 if sched_base.total_tardiness > 0 else 0.0
-                        acc = sum(1 for l in logs if l.accepted)
-
-                        sens_runs.append({
-                            "threshold_H": H,
-                            "route_id": r_id,
-                            "policy": pol,
-                            "delta": delta,
-                            "budget": B,
-                            "base_tt": sched_base.total_tardiness,
-                            "base_nl": sched_base.total_lateness,
-                            "delta_tt": d_tt,
-                            "delta_nl": d_nl,
-                            "tt_red_pct": tt_red,
-                            "dist_inc_pct": d_dist,
-                            "accepted_moves": acc
-                        })
+            sens_runs.extend(evaluate_sensitivity_route(instances[r_id], H))
 
     df_sens = pd.DataFrame(sens_runs)
     if not df_sens.empty and "threshold_H" in df_sens.columns:
@@ -195,6 +204,214 @@ def run_threshold_sensitivity_suite(
         sens_summary_dict = []
 
     return sens_runs, {"records": sens_summary_dict}
+
+def _frozen_plan(pol, B, delta, s_seed, selected, logs, final_r, sched_fin, v_res) -> Dict[str, Any]:
+    """Planning decision in the frozen-plan format of the M8 travel-time scenario evaluation."""
+    return {
+        "policy": pol,
+        "budget": B,
+        "delta": delta,
+        "random_seed": s_seed,
+        "selected": selected,
+        "accepted": [l.customer_id for l in logs if l.accepted],
+        "final_route": final_r,
+        "planning": {
+            "final_tt": sched_fin.total_tardiness,
+            "final_nl": sched_fin.total_lateness,
+            "final_dist": sched_fin.total_distance,
+            "is_feasible": v_res.feasible
+        }
+    }
+
+def evaluate_route_grid(
+    inst,
+    budgets: List[float],
+    deltas: List[float],
+    policies: List[str],
+    random_seeds: List[int],
+    require_promised_times: bool = True,
+    return_plans: bool = False
+) -> Dict[str, Any]:
+    """
+    Factorial benchmark grid (B x delta x policy, Random averaged over seeds) on the Nearest Neighbor baseline
+    of one route whose predicted risks are already injected. Returns the run records, the individual Random
+    seed records and, if return_plans, the frozen plans (selected / accepted customers and final routes).
+    """
+    r_id = inst.route_id
+    run_records: List[Dict[str, Any]] = []
+    all_individual_seed_records: List[Dict[str, Any]] = []
+    plans: Optional[List[Dict[str, Any]]] = [] if return_plans else None
+    num_customers = len([s for s, sobj in inst.stops.items() if sobj.stop_type == "Dropoff" or s != inst.depot_id])
+    
+    base_route = build_nearest_neighbor_baseline(inst)
+    sched_base = propagate_schedule(inst, base_route)
+    base_tt = sched_base.total_tardiness
+    base_nl = sched_base.total_lateness
+    base_dist = sched_base.total_distance
+
+    for delta in deltas:
+        t_act_start = time.perf_counter()
+        g_scores, _ = compute_actionability_scores(inst, base_route, delta=delta)
+        actionability_runtime_sec = time.perf_counter() - t_act_start
+
+        for B in budgets:
+            for pol in policies:
+                if pol == "Random":
+                    seed_runs = []
+                    for s_seed in random_seeds:
+                        t_seed_start = time.perf_counter()
+                        ranked = rank_candidates(inst, base_route, policy="Random", g_scores=g_scores, random_seed=s_seed)
+                        selected = select_intervention_set(ranked, budget_b=B, num_customers=num_customers)
+                        final_r, logs = selective_forward_relocation(inst, base_route, selected, delta=delta)
+                        v_res = validate_route(
+                            inst, final_r, baseline_route=base_route, delta=delta,
+                            require_promised_times=require_promised_times
+                        )
+                        sched_fin = propagate_schedule(inst, final_r)
+                        seed_runtime_sec = time.perf_counter() - t_seed_start
+
+                        d_tt = base_tt - sched_fin.total_tardiness
+                        d_nl = base_nl - sched_fin.total_lateness
+                        d_dist_pct = ((sched_fin.total_distance - base_dist) / base_dist) * 100.0 if base_dist > 0 else 0.0
+                        tt_red_pct = (d_tt / base_tt) * 100.0 if base_tt > 0 else 0.0
+                        acc = sum(1 for l in logs if l.accepted)
+
+                        seed_rec = {
+                            "route_id": r_id,
+                            "baseline": "NearestNeighbor",
+                            "delta": delta,
+                            "budget": B,
+                            "policy": "Random",
+                            "random_seed": s_seed,
+                            "base_tt": base_tt,
+                            "base_nl": base_nl,
+                            "base_dist": base_dist,
+                            "delta_tt": d_tt,
+                            "delta_nl": d_nl,
+                            "tt_red_pct": tt_red_pct,
+                            "dist_inc_pct": d_dist_pct,
+                            "accepted_moves": acc,
+                            "num_candidates": len(selected),
+                            "is_feasible": v_res.feasible,
+                            "runtime_seconds": seed_runtime_sec,
+                            "actionability_runtime_seconds": actionability_runtime_sec
+                        }
+                        all_individual_seed_records.append(seed_rec)
+                        if plans is not None:
+                            plans.append(_frozen_plan("Random", B, delta, s_seed, selected, logs, final_r, sched_fin, v_res))
+                        seed_runs.append({
+                            "d_tt": d_tt, "d_nl": d_nl, "d_dist_pct": d_dist_pct,
+                            "tt_red_pct": tt_red_pct, "acc": acc, "feasible": v_res.feasible,
+                            "runtime_seconds": seed_runtime_sec
+                        })
+
+                    run_records.append({
+                        "route_id": r_id,
+                        "baseline": "NearestNeighbor",
+                        "delta": delta,
+                        "budget": B,
+                        "policy": "Random",
+                        "base_tt": base_tt,
+                        "base_nl": base_nl,
+                        "base_dist": base_dist,
+                        "delta_tt": float(np.mean([x["d_tt"] for x in seed_runs])),
+                        "delta_nl": float(np.mean([x["d_nl"] for x in seed_runs])),
+                        "tt_red_pct": float(np.mean([x["tt_red_pct"] for x in seed_runs])),
+                        "dist_inc_pct": float(np.mean([x["d_dist_pct"] for x in seed_runs])),
+                        "accepted_moves": float(np.mean([x["acc"] for x in seed_runs])),
+                        "num_candidates": len(selected),
+                        "is_feasible": all(x["feasible"] for x in seed_runs),
+                        "runtime_seconds": float(np.mean([x["runtime_seconds"] for x in seed_runs])),
+                        "actionability_runtime_seconds": actionability_runtime_sec
+                    })
+
+                else:
+                    t_pol_start = time.perf_counter()
+                    ranked = rank_candidates(inst, base_route, policy=pol, g_scores=g_scores)
+                    selected = select_intervention_set(ranked, budget_b=B, num_customers=num_customers)
+                    final_r, logs = selective_forward_relocation(inst, base_route, selected, delta=delta)
+                    v_res = validate_route(
+                        inst, final_r, baseline_route=base_route, delta=delta,
+                        require_promised_times=require_promised_times
+                    )
+                    sched_fin = propagate_schedule(inst, final_r)
+                    pol_runtime_sec = time.perf_counter() - t_pol_start
+                    if plans is not None:
+                        plans.append(_frozen_plan(pol, B, delta, None, selected, logs, final_r, sched_fin, v_res))
+
+                    d_tt = base_tt - sched_fin.total_tardiness
+                    d_nl = base_nl - sched_fin.total_lateness
+                    d_dist_pct = ((sched_fin.total_distance - base_dist) / base_dist) * 100.0 if base_dist > 0 else 0.0
+                    tt_red_pct = (d_tt / base_tt) * 100.0 if base_tt > 0 else 0.0
+                    acc = sum(1 for l in logs if l.accepted)
+
+                    run_records.append({
+                        "route_id": r_id,
+                        "baseline": "NearestNeighbor",
+                        "delta": delta,
+                        "budget": B,
+                        "policy": pol,
+                        "base_tt": base_tt,
+                        "base_nl": base_nl,
+                        "base_dist": base_dist,
+                        "delta_tt": d_tt,
+                        "delta_nl": d_nl,
+                        "tt_red_pct": tt_red_pct,
+                        "dist_inc_pct": d_dist_pct,
+                        "accepted_moves": acc,
+                        "num_candidates": len(selected),
+                        "is_feasible": v_res.feasible,
+                        "runtime_seconds": pol_runtime_sec,
+                        "actionability_runtime_seconds": actionability_runtime_sec
+                    })
+
+    return {
+        "base_route": base_route,
+        "base_tt": base_tt,
+        "base_nl": base_nl,
+        "base_dist": base_dist,
+        "runs": run_records,
+        "seed_runs": all_individual_seed_records,
+        "plans": plans
+    }
+
+def evaluate_clarke_wright_route(inst, budgets: List[float]) -> List[Dict[str, Any]]:
+    """Clarke-Wright baseline robustness grid (delta = 5%, five deterministic policies) for one route."""
+    r_id = inst.route_id
+    cw_records: List[Dict[str, Any]] = []
+    cw_base = build_clarke_wright_baseline(inst)
+    cw_sched_base = propagate_schedule(inst, cw_base)
+    num_cust = len([s for s, sobj in inst.stops.items() if sobj.stop_type == "Dropoff" or s != inst.depot_id])
+    
+    delta = 0.05
+    g_scores, _ = compute_actionability_scores(inst, cw_base, delta=delta)
+    for B in budgets:
+        for pol in ["RA", "AB", "RB", "Slack", "Deadline"]:
+            ranked = rank_candidates(inst, cw_base, policy=pol, g_scores=g_scores)
+            selected = select_intervention_set(ranked, budget_b=B, num_customers=num_cust)
+            final_r, logs = selective_forward_relocation(inst, cw_base, selected, delta=delta)
+            sched_fin = propagate_schedule(inst, final_r)
+            d_tt = cw_sched_base.total_tardiness - sched_fin.total_tardiness
+            d_nl = cw_sched_base.total_lateness - sched_fin.total_lateness
+            d_dist_pct = ((sched_fin.total_distance - cw_sched_base.total_distance) / cw_sched_base.total_distance) * 100.0 if cw_sched_base.total_distance > 0 else 0.0
+            tt_red_pct = (d_tt / cw_sched_base.total_tardiness) * 100.0 if cw_sched_base.total_tardiness > 0 else 0.0
+            acc = sum(1 for l in logs if l.accepted)
+            cw_records.append({
+                "route_id": r_id,
+                "baseline": "ClarkeWright",
+                "delta": delta,
+                "budget": B,
+                "policy": pol,
+                "base_tt": cw_sched_base.total_tardiness,
+                "base_nl": cw_sched_base.total_lateness,
+                "base_dist": cw_sched_base.total_distance,
+                "delta_tt": d_tt,
+                "delta_nl": d_nl,
+                "tt_red_pct": tt_red_pct,
+                "dist_inc_pct": d_dist_pct,
+                "accepted_moves": acc
+            })
+    return cw_records
 
 def run_benchmark_experiments(
     raw_dir: Optional[str] = None,
@@ -289,126 +506,12 @@ def run_benchmark_experiments(
 
     for r_idx, r_id in enumerate(test_route_ids, 1):
         print(f"[Benchmark] Evaluating test route {r_idx}/{len(test_route_ids)}: {r_id} ...", flush=True)
-        inst = instances[r_id]
-        num_customers = len([s for s, sobj in inst.stops.items() if sobj.stop_type == "Dropoff" or s != inst.depot_id])
-        
-        base_route = build_nearest_neighbor_baseline(inst)
-        sched_base = propagate_schedule(inst, base_route)
-        base_tt = sched_base.total_tardiness
-        base_nl = sched_base.total_lateness
-        base_dist = sched_base.total_distance
-
-        for delta in deltas:
-            t_act_start = time.perf_counter()
-            g_scores, _ = compute_actionability_scores(inst, base_route, delta=delta)
-            actionability_runtime_sec = time.perf_counter() - t_act_start
-
-            for B in budgets:
-                for pol in policies:
-                    if pol == "Random":
-                        seed_runs = []
-                        for s_seed in random_seeds:
-                            t_seed_start = time.perf_counter()
-                            ranked = rank_candidates(inst, base_route, policy="Random", g_scores=g_scores, random_seed=s_seed)
-                            selected = select_intervention_set(ranked, budget_b=B, num_customers=num_customers)
-                            final_r, logs = selective_forward_relocation(inst, base_route, selected, delta=delta)
-                            v_res = validate_route(
-                                inst, final_r, baseline_route=base_route, delta=delta,
-                                require_promised_times=(primary_h is not None)
-                            )
-                            sched_fin = propagate_schedule(inst, final_r)
-                            seed_runtime_sec = time.perf_counter() - t_seed_start
-
-                            d_tt = base_tt - sched_fin.total_tardiness
-                            d_nl = base_nl - sched_fin.total_lateness
-                            d_dist_pct = ((sched_fin.total_distance - base_dist) / base_dist) * 100.0 if base_dist > 0 else 0.0
-                            tt_red_pct = (d_tt / base_tt) * 100.0 if base_tt > 0 else 0.0
-                            acc = sum(1 for l in logs if l.accepted)
-
-                            seed_rec = {
-                                "route_id": r_id,
-                                "baseline": "NearestNeighbor",
-                                "delta": delta,
-                                "budget": B,
-                                "policy": "Random",
-                                "random_seed": s_seed,
-                                "base_tt": base_tt,
-                                "base_nl": base_nl,
-                                "base_dist": base_dist,
-                                "delta_tt": d_tt,
-                                "delta_nl": d_nl,
-                                "tt_red_pct": tt_red_pct,
-                                "dist_inc_pct": d_dist_pct,
-                                "accepted_moves": acc,
-                                "num_candidates": len(selected),
-                                "is_feasible": v_res.feasible,
-                                "runtime_seconds": seed_runtime_sec,
-                                "actionability_runtime_seconds": actionability_runtime_sec
-                            }
-                            all_individual_seed_records.append(seed_rec)
-                            seed_runs.append({
-                                "d_tt": d_tt, "d_nl": d_nl, "d_dist_pct": d_dist_pct,
-                                "tt_red_pct": tt_red_pct, "acc": acc, "feasible": v_res.feasible,
-                                "runtime_seconds": seed_runtime_sec
-                            })
-
-                        run_records.append({
-                            "route_id": r_id,
-                            "baseline": "NearestNeighbor",
-                            "delta": delta,
-                            "budget": B,
-                            "policy": "Random",
-                            "base_tt": base_tt,
-                            "base_nl": base_nl,
-                            "base_dist": base_dist,
-                            "delta_tt": float(np.mean([x["d_tt"] for x in seed_runs])),
-                            "delta_nl": float(np.mean([x["d_nl"] for x in seed_runs])),
-                            "tt_red_pct": float(np.mean([x["tt_red_pct"] for x in seed_runs])),
-                            "dist_inc_pct": float(np.mean([x["d_dist_pct"] for x in seed_runs])),
-                            "accepted_moves": float(np.mean([x["acc"] for x in seed_runs])),
-                            "num_candidates": len(selected),
-                            "is_feasible": all(x["feasible"] for x in seed_runs),
-                            "runtime_seconds": float(np.mean([x["runtime_seconds"] for x in seed_runs])),
-                            "actionability_runtime_seconds": actionability_runtime_sec
-                        })
-
-                    else:
-                        t_pol_start = time.perf_counter()
-                        ranked = rank_candidates(inst, base_route, policy=pol, g_scores=g_scores)
-                        selected = select_intervention_set(ranked, budget_b=B, num_customers=num_customers)
-                        final_r, logs = selective_forward_relocation(inst, base_route, selected, delta=delta)
-                        v_res = validate_route(
-                            inst, final_r, baseline_route=base_route, delta=delta,
-                            require_promised_times=(primary_h is not None)
-                        )
-                        sched_fin = propagate_schedule(inst, final_r)
-                        pol_runtime_sec = time.perf_counter() - t_pol_start
-
-                        d_tt = base_tt - sched_fin.total_tardiness
-                        d_nl = base_nl - sched_fin.total_lateness
-                        d_dist_pct = ((sched_fin.total_distance - base_dist) / base_dist) * 100.0 if base_dist > 0 else 0.0
-                        tt_red_pct = (d_tt / base_tt) * 100.0 if base_tt > 0 else 0.0
-                        acc = sum(1 for l in logs if l.accepted)
-
-                        run_records.append({
-                            "route_id": r_id,
-                            "baseline": "NearestNeighbor",
-                            "delta": delta,
-                            "budget": B,
-                            "policy": pol,
-                            "base_tt": base_tt,
-                            "base_nl": base_nl,
-                            "base_dist": base_dist,
-                            "delta_tt": d_tt,
-                            "delta_nl": d_nl,
-                            "tt_red_pct": tt_red_pct,
-                            "dist_inc_pct": d_dist_pct,
-                            "accepted_moves": acc,
-                            "num_candidates": len(selected),
-                            "is_feasible": v_res.feasible,
-                            "runtime_seconds": pol_runtime_sec,
-                            "actionability_runtime_seconds": actionability_runtime_sec
-                        })
+        grid = evaluate_route_grid(
+            instances[r_id], budgets, deltas, policies, random_seeds,
+            require_promised_times=(primary_h is not None)
+        )
+        run_records.extend(grid["runs"])
+        all_individual_seed_records.extend(grid["seed_runs"])
 
     df_nn = pd.DataFrame(run_records)
     if save_outputs:
@@ -420,39 +523,7 @@ def run_benchmark_experiments(
     cw_records = []
     print("\n[Benchmark] Evaluating Clarke-Wright baseline robustness on test routes...")
     for r_id in test_route_ids:
-        inst = instances[r_id]
-        cw_base = build_clarke_wright_baseline(inst)
-        cw_sched_base = propagate_schedule(inst, cw_base)
-        num_cust = len([s for s, sobj in inst.stops.items() if sobj.stop_type == "Dropoff" or s != inst.depot_id])
-        
-        delta = 0.05
-        g_scores, _ = compute_actionability_scores(inst, cw_base, delta=delta)
-        for B in budgets:
-            for pol in ["RA", "AB", "RB", "Slack", "Deadline"]:
-                ranked = rank_candidates(inst, cw_base, policy=pol, g_scores=g_scores)
-                selected = select_intervention_set(ranked, budget_b=B, num_customers=num_cust)
-                final_r, logs = selective_forward_relocation(inst, cw_base, selected, delta=delta)
-                sched_fin = propagate_schedule(inst, final_r)
-                d_tt = cw_sched_base.total_tardiness - sched_fin.total_tardiness
-                d_nl = cw_sched_base.total_lateness - sched_fin.total_lateness
-                d_dist_pct = ((sched_fin.total_distance - cw_sched_base.total_distance) / cw_sched_base.total_distance) * 100.0 if cw_sched_base.total_distance > 0 else 0.0
-                tt_red_pct = (d_tt / cw_sched_base.total_tardiness) * 100.0 if cw_sched_base.total_tardiness > 0 else 0.0
-                acc = sum(1 for l in logs if l.accepted)
-                cw_records.append({
-                    "route_id": r_id,
-                    "baseline": "ClarkeWright",
-                    "delta": delta,
-                    "budget": B,
-                    "policy": pol,
-                    "base_tt": cw_sched_base.total_tardiness,
-                    "base_nl": cw_sched_base.total_lateness,
-                    "base_dist": cw_sched_base.total_distance,
-                    "delta_tt": d_tt,
-                    "delta_nl": d_nl,
-                    "tt_red_pct": tt_red_pct,
-                    "dist_inc_pct": d_dist_pct,
-                    "accepted_moves": acc
-                })
+        cw_records.extend(evaluate_clarke_wright_route(instances[r_id], budgets))
 
     # Paired Statistics
     cell_paired_stats = {}

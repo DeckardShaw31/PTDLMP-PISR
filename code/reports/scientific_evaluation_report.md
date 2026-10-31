@@ -12,7 +12,7 @@
 - Random seed runs: `code/outputs/random_seed_runs.csv` (480 seed-level runs)
 - Threshold sensitivity runs: `code/outputs/threshold_sensitivity_runs.csv` (288 runs across $H \in \{3, 4, 5, 6\}$)
 - Summary statistics: `code/outputs/benchmark_summary.json`
-- Clarke-Wright robustness runs: `code/outputs/robustness_clark_wright_runs.csv` (72 runs)
+- Clarke-Wright robustness runs: `code/outputs/robustness_clark_wright_runs.csv` (60 runs: 3 routes × 4 budgets × δ = 0.05 × 5 policies)
 - RQ1 prediction metrics: `code/outputs/rq1_prediction_results.json`
 - RQ1 test predictions: `code/outputs/rq1_test_predictions.csv` (534 test stops)
 - Generated Figures: `figures/fig2_policy_comparison.png`, `figures/fig3_route_before_after.png`

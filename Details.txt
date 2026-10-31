@@ -497,12 +497,13 @@ Policy            Avg Delta TT  TT Red (%)  Avg Delta NL  Dist Inc (%)  Moves  F
 RA (Proposed)     +1,417.91 min 12.12%      +3.65 stops   +2.05%        17.85  100.0%    0.255 s
 AB (Action.)      +1,434.54 min 12.23%      +3.52 stops   +2.11%        17.29  100.0%    0.272 s
 RB (Risk-Only)      +367.63 min  2.89%      +0.83 stops   +1.93%         7.42  100.0%    0.241 s
-Slack-Based         +403.50 min  4.00%      +0.40 stops   +1.48%        11.58  100.0%    0.379 s
-Deadline/Thresh     +272.05 min  2.24%      +0.73 stops   +2.28%         6.31  100.0%    0.180 s
-Random Baseline     +299.49 min  2.52%      +0.72 stops   +1.95%         6.92  100.0%    0.213 s
+Slack-Based         +403.50 min  3.96%      +0.40 stops   +1.48%        11.02  100.0%    0.379 s
+Deadline/Thresh     +272.05 min  2.17%      +0.73 stops   +2.28%         6.31  100.0%    0.180 s
+Random Baseline     +299.49 min  2.52%      +0.72 stops   +1.95%         5.99  100.0%    0.213 s
 ----------------------------------------------------------------------------------------------------
 *Key Note*: 1,417.91 min is the average tardiness reduction (Delta TT) across all 16 parameter cells.
-Under standard operational settings (B = 20%, delta = 5%), RA achieves +1,962.71 min reduction.
+Under standard operational settings (B = 20%, delta = 5%), RA reduces tardiness by an average of
++1,962.71 min per route (from +1,451.43 to +2,261.79 min across the three held-out routes).
 
 4.4 STATISTICAL HYPOTHESIS TESTING
 ----------------------------------------------------------------------------------------------------
@@ -577,15 +578,22 @@ all budgets and tolerances.
 
 4.7 CLARKE-WRIGHT SAVINGS BASELINE ROBUSTNESS
 ----------------------------------------------------------------------------------------------------
-Under Clarke-Wright baseline dispatch (B = 20%, delta = 5%, 72 runs):
-- RA: Avg Delta TT = +1,248.5 min (14.6% reduction), Avg Delta NL = +6.00 stops, Dist Inc = +2.12%.
-- Replicates the actionability dominance observed under Nearest Neighbor initial dispatch.
+Clarke-Wright robustness suite: 60 runs (3 test routes x 4 budgets x delta = 5% x 5 policies:
+RA, AB, RB, Slack, Deadline). At the standard setting (B = 20%, delta = 5%):
+- RA:       Avg Delta TT = +1,761.54 min (13.09% reduction), Avg Delta NL = +6.00 stops, Dist Inc = +4.75%.
+- AB:       Avg Delta TT = +1,931.79 min (14.11% reduction), Avg Delta NL = +7.00 stops, Dist Inc = +4.67%.
+- RB:       Avg Delta TT =   +577.97 min  (4.19% reduction), Avg Delta NL = +1.33 stops, Dist Inc = +4.19%.
+- Slack:    Avg Delta TT =   +938.52 min  (6.03% reduction), Avg Delta NL = +2.67 stops, Dist Inc = +4.59%.
+- Deadline: Avg Delta TT =   +755.31 min  (5.30% reduction), Avg Delta NL = +2.00 stops, Dist Inc = +4.13%.
+- Actionability-informed targeting (RA, AB) still outperforms risk-only and heuristic targeting;
+  under this constructor AB exceeds RA.
 
 4.8 RANDOM SEED ROBUSTNESS SUITE
 ----------------------------------------------------------------------------------------------------
 Evaluated across 10 independent random seeds across all 48 parameter cells (480 total seed runs):
-- Random targeting average Delta TT across seeds: 299.49 min (std: 38.4 min).
-- RA advantage over Random is stable and consistent across every individual random seed.
+- Random targeting average Delta TT across seeds: 299.49 min (std of the 10 seed means: 77.6 min;
+  range 154.95 to 418.58 min).
+- RA's Delta TT is at least Random's in all 480 cell-seed pairs.
 
 ====================================================================================================
 5. SYSTEM FIGURES & VISUALIZATIONS
@@ -645,29 +653,29 @@ Evaluated across 10 independent random seeds across all 48 parameter cells (480 
 
 5.2 FIGURE 2: POLICY PERFORMANCE COMPARISON (`figures/fig2_policy_comparison.png`)
 ----------------------------------------------------------------------------------------------------
-A grouped 4-panel empirical comparison across the 288 benchmark runs under H = 4.0 hours:
-  Panel A: Average Total Tardiness Reduction (Delta TT in minutes)
-    - RA: +1,417.91 min | AB: +1,434.54 min | Slack: +403.50 min | RB: +367.63 min | Random: +299.49 min
-  Panel B: Percentage Tardiness Reduction (% Delta TT)
-    - RA: 12.12% | AB: 12.23% | Slack: 4.00% | RB: 2.89% | Random: 2.52%
-  Panel C: Number of Late Deliveries Eliminated (Delta NL)
-    - RA: +3.65 stops | AB: +3.52 stops | RB: +0.83 stops | Deadline: +0.73 stops | Random: +0.72 stops
-  Panel D: Percentage Route Distance Expansion (% Delta D)
-    - RA: +2.05% | AB: +2.11% | RB: +1.93% | Random: +1.95% | Slack: +1.48% (All well within delta)
+A 2-panel bar chart read from `code/outputs/benchmark_summary.json` (288 benchmark runs, H = 4.0 hours):
+  Panel A: Mean Total Tardiness Reduction (%)
+    - RA: 12.1% | AB: 12.2% | Slack: 4.0% | RB: 2.9% | Random: 2.5% | Deadline: 2.2%
+  Panel B: Mean Relocations Accepted per Route
+    - RA: 17.9 | AB: 17.3 | Slack: 11.0 | RB: 7.4 | Deadline: 6.3 | Random: 6.0
+  (Absolute Delta TT, Delta NL and distance increase are reported in Table 4.3, not in this figure.)
 
 5.3 FIGURE 3: ROUTE BEFORE VS. AFTER RESEQUENCING (`figures/fig3_route_before_after.png`)
 ----------------------------------------------------------------------------------------------------
-Displays geographic delivery trajectories for RouteID_693060a6 (179 stops) under B=0.20, delta=0.05:
+Displays geographic delivery trajectories for RouteID_15baae2d (station DCH4, 192 stops) under
+B=0.20, delta=0.05. The script picks the first loaded route whose baseline tardiness exceeds 50 min;
+this is a validation-block route, not one of the three held-out test routes. Predicted risk is not
+attached in the script (p_i = 0 for every stop), so every RA score ties at zero and the g_i tie-break
+makes the selection identical to AB (38 customers selected).
   Left Panel (Baseline Nearest Neighbor Route R^0):
-    - Base Total Tardiness: 7,735.54 minutes.
-    - Base Late Deliveries: 77 late stops out of 179.
-    - Shows clusters of severely delayed drop-offs occurring in the final third of the open route.
-  Right Panel (PISR Resequenced Route R'):
-    - Resequenced Total Tardiness: 5,772.82 minutes (Delta TT = +1,962.71 minutes, -25.4% reduction).
-    - Resequenced Late Deliveries: 71 late stops (Delta NL = +6 late stops eliminated).
-    - Distance Increase: +1.96 km (+4.98%, strictly <= 5.0% tolerance).
-    - Visualizes selective forward bypass arcs where 18 highly actionable stops were moved forward
-      into topologically adjacent upstream sequence slots.
+    - Base Total Tardiness: 17,127.3 minutes.
+    - Base Late Deliveries: 114 late stops out of 192.
+    - Base Distance: 42.4 km.
+  Right Panel (Resequenced Route R'):
+    - Resequenced Total Tardiness: 15,153.4 minutes (Delta TT = +1,973.84 minutes, -11.5% reduction).
+    - Resequenced Late Deliveries: 109 late stops (Delta NL = +5 late stops eliminated).
+    - Distance: 44.3 km (+4.64%, within the 5.0% tolerance).
+    - Marks the 21 accepted forward relocations.
 
 5.4 FIGURE 4: LOCAL FORWARD RELOCATION MECHANICS
 ----------------------------------------------------------------------------------------------------

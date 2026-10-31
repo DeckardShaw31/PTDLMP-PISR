@@ -13,7 +13,8 @@ from src.routing.schedule import propagate_schedule
 from src.routing.actionability import compute_actionability_scores, rank_candidates, select_intervention_set
 from src.routing.sfr import selective_forward_relocation
 
-def create_policy_comparison_figure(benchmark_json_path: str, out_path: str):
+def create_policy_comparison_figure(benchmark_json_path: str, out_path: str,
+                                    sample_desc: str = "Held-out Amazon Routes, Derived 4-Hour Service Threshold, 288 Runs"):
     """
     Creates Figure 2: Quantitative policy comparison dynamically loaded from benchmark_summary.json.
     Plots Mean Total Tardiness Reduction (%) and Mean Accepted Relocations.
@@ -43,7 +44,7 @@ def create_policy_comparison_figure(benchmark_json_path: str, out_path: str):
     # Bar chart 1: % TT Reduction
     bars1 = ax1.bar(display_names, tt_reduction, color=colors, width=0.55, edgecolor="black", linewidth=0.8)
     ax1.set_ylabel("Total Tardiness Reduction (%)", fontsize=12, fontweight="bold")
-    ax1.set_title("A. Mean Tardiness Reduction by Targeting Policy\n(Held-out Amazon Routes, Derived 4-Hour Service Threshold, 288 Runs)", fontsize=12, fontweight="bold", pad=12)
+    ax1.set_title(f"A. Mean Tardiness Reduction by Targeting Policy\n({sample_desc})", fontsize=12, fontweight="bold", pad=12)
     max_tt = max(tt_reduction) if (tt_reduction and max(tt_reduction) > 0) else 15.0
     ax1.set_ylim(0, max(1.0, max_tt * 1.3))
     for bar in bars1:
@@ -173,5 +174,14 @@ if __name__ == "__main__":
     figures_dir = os.path.abspath(os.path.join(base_dir, "..", "figures"))
     os.makedirs(figures_dir, exist_ok=True)
 
-    create_policy_comparison_figure(bm_json, os.path.join(figures_dir, "fig2_policy_comparison.png"))
-    create_route_resequencing_map_figure(raw_dir, os.path.join(figures_dir, "fig3_route_before_after.png"))
+    if "--full-cohort" in sys.argv:
+        fc_json = os.path.join(base_dir, "outputs", "full_cohort", "full_cohort_summary.json")
+        with open(fc_json, "r", encoding="utf-8") as f:
+            n_routes = json.load(f)["run_metadata"]["test_routes_evaluated"]
+        fc_dir = os.path.join(figures_dir, "full_cohort")
+        os.makedirs(fc_dir, exist_ok=True)
+        create_policy_comparison_figure(fc_json, os.path.join(fc_dir, "fig2_policy_comparison.png"),
+                                        f"{n_routes:,} Held-out Amazon Routes, Derived 4-Hour Threshold, {n_routes * 16 * 6:,} Runs")
+    else:
+        create_policy_comparison_figure(bm_json, os.path.join(figures_dir, "fig2_policy_comparison.png"))
+        create_route_resequencing_map_figure(raw_dir, os.path.join(figures_dir, "fig3_route_before_after.png"))
